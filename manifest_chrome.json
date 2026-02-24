@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Pictal",
+  "version": "2026.2.23",
+  "description": "Enlarge and preview images and videos from links.",
+  "web_accessible_resources": [
+    {
+      "resources": ["data/sieves.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "permissions": [
+    "cookies",
+    "storage",
+    "downloads",
+    "userScripts"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background/service.js"
+  },
+  "incognito": "split",
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  }
+}

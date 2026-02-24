@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<head>
+	<meta charset="UTF-8">
+	<title>:: Pictal ::</title>
+	<link rel="stylesheet" href="./options.css">
+	<script src="../lib/ace/ace.js"></script>
+	<script src="../lib/beautify.min.js"></script>
+	<script src="./options.js"></script>
+</head>
+<body spellcheck="false">
+	<nav id="nav_menu">
+		<a href="#settings">Preferences</a>
+		<a href="#shortcuts">Shortcuts</a>
+		<a href="#sieves">Sieves</a>
+		<a href="#sites">Site Filter</a>
+		<a href="#info">Info</a>
+	</nav>
+	<section id="allow_scripts_message" class="warning" style="display: none;"></section>
+
+	<section id="settings-sec">
+		<div class="prow tiptop">
+			<div class="tip" data-lng="HZ_ENDIS_TIP"></div>
+			<div>
+				<select name="hold_to_activate" class="fn">
+					<option>enabled</option>
+					<option>disabled</option>
+				</select>
+				<span class="clean">when holding</span>
+				<select name="hold_to_activate_trigger" class="fn">
+					<option>nothing</option>
+					<!--option value="mouse2">right click</option-->
+					<option value="Shift">shift</option>
+					<option value="Control">ctrl</option>
+					<option value="Alt">alt</option>
+				</select>
+			</div>
+		</div>
+		<div class="prow">
+			<label>Display delay (ms)</label>
+			<span>
+				<input name="selection_delay" type="number" step="100" min="0" max="5000" value="500">
+			</span>
+		</div>
+		<div class="prow">
+			<label>Default media volume (%)</label>
+			<span>
+				<input name="video_volume" type="number" step="10" min="0" max="100" value="50">
+			</span>
+		</div>
+		<div class="prow">
+			<label>Show resolution in caption</label>
+			<span>
+				<input id="show_resolution" name="show_resolution" type="checkbox" style="display: none">
+				<label for="show_resolution" class="checkbox"></label>
+			</span>
+		</div>
+		<div class="prow">
+			<label>Preload 2 images ahead in a gallery</label>
+			<span>
+				<input id="preload_ahead" name="preload_ahead" type="checkbox" style="display: none">
+				<label for="preload_ahead" class="checkbox"></label>
+			</span>
+		</div>
+		<h4>Caption</h4>
+		<div class="prow">
+			<label>Show caption text</label>
+			<span>
+				<input id="show_caption" name="show_caption" type="checkbox" style="display: none">
+				<label for="show_caption" class="checkbox"></label>
+			</span>
+		</div>
+		<div class="prow">
+			<label>Wrap caption by default</label>
+			<span>
+				<input id="wrap_caption" name="wrap_caption" type="checkbox" style="display: none">
+				<label for="wrap_caption" class="checkbox"></label>
+			</span>
+		</div>
+	</section>
+
+	<section id="shortcuts-sec">
+		<ul class="sub_shortcuts">
+			<li><label><input name="zoom_in" value="">, <b>Enter</b><span class="extra"></span> <span>full-zoom mode</span></label></li>
+			<li><label><input name="wrap_caption" value=""> <span>wrap caption</span></label></li>
+			<li><label><input name="open_image_in_new_tab" value=""> <span>open image in new tab</span></label></li>
+			<li><label><input name="close_preview" value="">, <b>Esc</b> <span>hide the pop-up and stop loading its content</span></label></li>
+			<li><b>Ctrl + C</b> <label>Copy URL, or press twice to copy caption-text</label></li>
+			<li><b>+</b> / <b>-</b> <span>Zoom in / out</span></li>
+
+			<li style="list-style-type: none" class="shortcuts">
+				<label><input name="open_options" value=""> <span>Preferences</span></label>
+				<label><input name="flip_horizontal" value=""> <span>Flip vertical</span></label>
+				<label><input name="flip_vertical" value=""> <span>Flip horizontal</span></label>
+				<label><input name="rotate_left" value=""> <span>Rotate left</span></label>
+				<label><input name="rotate_right" value=""> <span>Rotate right</span></label>
+				<label><input name="natural_size" value=""> <span>Natural size</span></label>
+				<label><input name="auto_fit" value=""> <span>Auto fit</span></label>
+				<label><input name="fit_to_width" value=""> <span>Fit to width</span></label>
+				<label><input name="fit_to_height" value=""> <span>Fit to height</span></label>
+			</li>
+
+			<li style="list-style-type: none"><h4>In album</h4></li>
+			<li><b>Space</b>, <b>Right</b>, <b>PageDown</b>, <b>Wheel Down</b> Step forward</li>
+			<li><b>Shift + Space</b>, <b>Left</b>, <b>PageUp</b>, <b>Wheel Up</b> Step backward</li>
+			<li><b>Shift + Left/Right, <b>Shift + PageUp/PageDown</b></b> Step 5 items backward/forward</li>
+			<li><b>Home</b>, <b>End</b> Jump to start/end</li>
+
+			<li style="list-style-type: none"><h4>On media (audio/video)</h4></li>
+			<li><b>Space</b> (<b>+ Ctrl</b> in album) Play/Pause</li>
+			<li><b>Shift + Space</b> Show/Hide controls</li>
+			<li><b>Left / Right / Wheel</b> (<b>+ Ctrl</b> in album) Backward/forward 5s (+Shift: 15s)</li>
+			<li><b>Up/Down</b> Adjust volume</li>
+			<li><b>PageUp/PageDown</b> Frame-step for video (assumes 25fps)</li>
+			<li><b>M</b> Mute/unmute</li>
+
+			<li style="list-style-type: none"><h4>Full-Zoom mode</h4></li>
+			<li><b>Wheel</b> to Zoom-in/Zoom-out:</li>
+			<ul>
+				<li>Over the image/media</li>
+				<li>When cursor changes to <i class="cur_zmin">zoom-in</i></li>
+			</ul>
+			<li><b>Wheel</b> to scroll album:</li>
+			<ul>
+				<li>Outside of the image/media</li>
+				<li>Near (100px) to the borders of the browser window</li>
+			</ul>
+		</ul>
+	</section>
+
+	<section id="sieves-sec">
+		<div class="inpbutt">
+			<div class="sieve_search">
+				<input id="sieve_search" tabindex="1" type="text" class="searchinput" maxlength="255" placeholder="search...">
+				<span class="clear_search" title="[Esc]">×</span>
+			</div>
+			<div class="action_buttons">
+				<span id="import_sieves" title="Import sieves">&darr;</span>
+				<span id="copy_rules_to_clipboard" title="Copy all rules to clipboard.">&#x1F4CB;</span>
+			</div>
+		</div>
+		<div id="sieve_container" class="cf"></div>
+	</section>
+
+	<section id="sites-sec">
+		<div class="inpbutt">
+		</div>
+
+		<label>
+			<textarea id="filters" tabindex="1" placeholder="Rule per line."></textarea>
+		</label>
+
+		<div id="sites_help" style="display: block;">
+			Basic syntax: <b>operator:regex</b>
+			Operators: <b>!</b> (blacklist), <b>~</b> (whitelist).
+			Start a line with a <b>;</b> to make it inactive.
+			
+			On reddit, allow only /r/DataHoarder
+			<code>!:^(?:old\.)?reddit\.com
+				~:^(?:old\.)?reddit\.com/r/DataHoarder</code>
+		</div>
+	</section>
+
+	<section id="info-sec">
+		<label>Based on <a target="_blank" href="https://github.com/hababr/Imagus-Reborn">Imagus</a></label>
+		<br>
+		<br>
+    	<div>For support, check out <a target="_blank" href="https://www.reddit.com/r/imagus/">r/Imagus</a></div>
+    	<div>Source code: <a target="_blank" href="https://github.com/Bytanel">GitHub</a></div>
+		</table>
+	</section>
+
+	<div id="right_panel">
+		<aside>
+			<b id="app_version">Pictal</b>
+			<hr>
+			<div class="op_buttons">
+				<button id="default_button">Default Settings</button>
+				<button id="new_button" style="display:none">New Sieve</button>
+				<button id="save_button">Save</button>
+			</div>
+		</aside>
+	</div>
+</body>
