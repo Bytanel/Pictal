@@ -6,6 +6,10 @@ Fully supported on Chrome and Firefox.
 
 Development is primarily focused on Firefox because that is what I use and the problems Imagus had on Firefox is what led me to create Pictal in the first place. If there are any issues on Chrome then I may not catch them unless reported.
 
+<div align="center">
+<img width="726" height="241" alt="image" src="https://github.com/user-attachments/assets/00b86063-4327-4aae-a386-dee2196be20a" />
+</div>
+
 # How Pictal Works
 
 1. Everytime an element is moused over, it looks for urls in the element, its ancestors, and its cousins.
