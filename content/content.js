@@ -121,6 +121,7 @@ function loadPictal() {
 		type: "GetPreferences"
 	}, (response) => {
 		PICTAL.Preferences = response.preferences;
+		PICTAL.Volume = PICTAL.Preferences["video_volume"] / 100;
 	});
 	chrome.runtime.sendMessage({
 		type: "GetShortcuts"
@@ -135,6 +136,8 @@ function loadPictal() {
 		CenterZoom: .75,
 		MouseX: 0,
 		MouseY: 0,
+		Muted: false,
+		Volume: 0,
 		Files: [],
 		FileIndex: 0,
 		FileCache: [],
@@ -154,7 +157,7 @@ function loadPictal() {
 		PICTAL.DIV.appendChild(vid);
 
 		PICTAL.VIDEOJS = videojs(vid);
-		PICTAL.VIDEOJS.muted(true);
+		PICTAL.VIDEOJS.muted(PICTAL.Muted);
 		PICTAL.VIDEOJSQUALITY = PICTAL.VIDEOJS.maxQualitySelector({
 			autoLabel: "Auto",
 			disableAuto: true,
@@ -211,7 +214,7 @@ function loadPictal() {
 			PICTAL.IMG.style.display = "block";
 			PICTAL.State = "preview";
 
-			renderPreviewLoop();
+			renderFrame();
 		};
 		PICTAL.IMG.addEventListener("load", function() {
 			PICTAL.IMG.onloadeddata();
@@ -239,7 +242,7 @@ function loadPictal() {
 		PICTAL.VIDEO.autoplay = true;
 		PICTAL.VIDEO.controls = true;
 		PICTAL.VIDEO.preload = "auto";
-		PICTAL.VIDEO.volume = PICTAL.Preferences["video_volume"] / 100;
+		PICTAL.VIDEO.volume = PICTAL.Volume;
 		PICTAL.VIDEO.style.cssText = `
 		    display: none;
 		    width: 100%;
@@ -253,16 +256,20 @@ function loadPictal() {
 			if (PICTAL.Files[PICTAL.FileIndex].videojs) {
 				PICTAL.VIDEOJS.el().style.display = "block";
 				PICTAL.VIDEOJS.loop(PICTAL.VIDEOJS.duration() <= 60);
-				PICTAL.VIDEOJS.muted(false);
+				PICTAL.VIDEOJS.muted(PICTAL.Muted);
+				PICTAL.VIDEOJS.volume(PICTAL.Volume);
 				PICTAL.VIDEOJS.play().catch(() => {
 					PICTAL.VIDEOJS.muted(true);
+					PICTAL.Muted = true;
 					PICTAL.VIDEOJS.play();
 				});
 			} else {
 				PICTAL.VIDEO.loop = (PICTAL.VIDEO.duration <= 60);
 				PICTAL.VIDEO.style.display = "block";
+				PICTAL.VIDEO.volume = PICTAL.Volume;
 				PICTAL.VIDEO.play().catch(() => {
 					PICTAL.VIDEO.muted = true;
+					PICTAL.Muted = true;
 					PICTAL.VIDEO.play();
 				});
 			}
@@ -270,7 +277,7 @@ function loadPictal() {
 			PICTAL.LOADER.style.opacity = "0";
 			PICTAL.DIV.style.opacity = "1";
 			PICTAL.State = "preview";
-			renderPreviewLoop();
+			renderFrame();
 		};
 		PICTAL.DIV.appendChild(PICTAL.VIDEO);
 
@@ -323,13 +330,9 @@ function loadPictal() {
 	    pointer-events: none;
 	    z-index: 2147483645;
 	    opacity: 0;
-	    top: 50vh;
-	    left: 50vw;
-	    width: 0px;
-	    height: 0px;
 	    padding: 0;
 	    margin: 0;
-	    transition: all .1s cubic-bezier(0, 1, 0.3, 1), opacity .1s ease-in;
+		outline: red dashed 2px;
 	`;
 	document.documentElement.appendChild(PICTAL.OUTLINE);
 
@@ -642,7 +645,6 @@ function loadPictal() {
 			updateLoader();
 		}
 
-
 		if (PICTAL.State == "selecting") {
 			setupTimer(PICTAL.HoverTimerVars.sieve, PICTAL.HoverTimerVars.target, PICTAL.HoverTimerVars.targetURL);
 		}
@@ -671,7 +673,12 @@ function loadPictal() {
 		for (let i = 0; i < 5; i++) {
 			if (parent == document.body) break;
 
-			for (const el of parent.getElementsByTagName("img")) {
+			let imgEls = parent.getElementsByTagName("img");
+			if (imgEls.length > 1) {
+				imgEls = [imgEls[0], imgEls[imgEls.length - 1]]; // just check first and last elements
+			}
+
+			for (const el of imgEls) {
 				if (elements.has(el)) continue;
 				if (!el.offsetWidth || !el.offsetHeight) continue; // if invisible
 				const elRects = el.getClientRects()[0];
@@ -733,34 +740,39 @@ function loadPictal() {
 		if (targetURL) {
 			PICTAL.TargetedElement = target;
 			PICTAL.TargetedElement.title = ""; // hide tooltips that would interfere with the preview window
-
-			// create outline on top of selected element
-			const rect = target.getBoundingClientRect();
-			PICTAL.OUTLINE.style.width = rect.width + "px";
-			PICTAL.OUTLINE.style.height = rect.height + "px";
-			PICTAL.OUTLINE.style.left = (rect.x + window.scrollX) + "px";
-			PICTAL.OUTLINE.style.top = (rect.y + window.scrollY) + "px";
-			PICTAL.OUTLINE.style.display = "block";
-			PICTAL.OUTLINE.style.opacity = "1";
-			PICTAL.OUTLINE.style.outline = "red dashed 2px";
-
 			PICTAL.State = "selecting";
+
+			updateOutline();
 
 			setupTimer(sieve, target, targetURL);
 		}
-	}, {
-		capture: true,
-		passive: false
 	});
 
-	function renderPreviewLoop() {
+	function updateOutline() {
+		if (!PICTAL.TargetedElement) return;
+
+		const rect = PICTAL.TargetedElement.getBoundingClientRect();
+		Object.assign(PICTAL.OUTLINE.style, {
+			position: "fixed",
+			top: rect.top + "px",
+			left: rect.left + "px",
+			width: rect.width + "px",
+			height: rect.height + "px"
+		});
+		PICTAL.OUTLINE.style.display = "block";
+		PICTAL.OUTLINE.style.opacity = "1";
+	}
+	window.addEventListener("resize", updateOutline);
+	window.addEventListener("scroll", updateOutline, true);
+
+	function renderFrame() {
 		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
 
 		// hide preview when switching between files in a gallery
 		if (PICTAL.State == "loading") {
 			PICTAL.DIV.style.opacity = "0";
 			updateLoader();
-			requestAnimationFrame(renderPreviewLoop);
+			requestAnimationFrame(renderFrame);
 			return;
 		}
 
@@ -768,7 +780,7 @@ function loadPictal() {
 		if (PICTAL.Files[PICTAL.FileIndex].video) {
 			if (PICTAL.Files[PICTAL.FileIndex].videojs) {
 				if (!PICTAL.VIDEOJSQUALITY.qlInternal.length) {
-					requestAnimationFrame(renderPreviewLoop);
+					requestAnimationFrame(renderFrame);
 					return;
 				}
 				const res = PICTAL.VIDEOJSQUALITY.qlInternal[PICTAL.VIDEOJSQUALITY.qlInternal.selectedIndex];
@@ -901,7 +913,7 @@ function loadPictal() {
 			PICTAL.CAPTION.style.display = "none";
 		}
 
-		requestAnimationFrame(renderPreviewLoop);
+		requestAnimationFrame(renderFrame);
 	}
 
 	// stop everything and reset to initial conditions
@@ -939,14 +951,21 @@ function loadPictal() {
 		PICTAL.VIDEOJS?.reset();
 	}
 
-	window.addEventListener("mouseout", (e) => {
+	document.addEventListener("mouseout", (e) => {
 		if (PICTAL.State != "idle" && !PICTAL.Center) reset();
+	});
+
+	document.addEventListener("blur", () => {
+		PICTAL.isHoldingActivateKey = false;
 	});
 
 	window.addEventListener("keyup", (e) => {
 		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"]) {
 			PICTAL.isHoldingActivateKey = false;
 		}
+	}, {
+		capture: true,
+		passive: false
 	});
 
 	window.addEventListener("keydown", (e) => {
@@ -1041,16 +1060,17 @@ function loadPictal() {
 			}
 
 			if (file.video) {
-				if (e.key == PICTAL.Shortcuts.video_volume_up || e.key == PICTAL.Shortcuts.video_volume_down) {
-					if (e.key == PICTAL.Shortcuts.video_volume_up) {
+				if (e.key == "ArrowUp" || e.key == "ArrowDown") {
+					if (e.key == "ArrowUp") {
 						if (PICTAL.VIDEO.muted) {
 							PICTAL.VIDEO.muted = false;
 							PICTAL.VIDEO.volume = 0;
 							if (file.videojs) PICTAL.VIDEOJS.muted(false);
 						}
 					}
-					PICTAL.VIDEO.volume = clamp(PICTAL.VIDEO.volume + (e.key == PICTAL.Shortcuts.video_volume_up ? .05 : -.05), 0, 1);
+					PICTAL.VIDEO.volume = clamp(PICTAL.VIDEO.volume + (e.key == "ArrowUp" ? .05 : -.05), 0, 1);
 					if (file.videojs) PICTAL.VIDEOJS.volume(PICTAL.VIDEO.volume);
+					PICTAL.Volume = PICTAL.VIDEO.volume;
 				}
 
 				if (e.key == "PageUp" || e.key == "PageDown") {
@@ -1066,6 +1086,7 @@ function loadPictal() {
 
 				if (e.key == "m") {
 					PICTAL.VIDEO.muted = !PICTAL.VIDEO.muted;
+					PICTAL.Muted = PICTAL.VIDEO.muted;
 					if (file.videojs) PICTAL.VIDEOJS.muted(PICTAL.VIDEO.muted);
 				}
 			}
@@ -1135,22 +1156,21 @@ function loadPictal() {
 				}
 			});
 		}
-
 	}, {
 		capture: true,
 		passive: false
 	});
 
-	window.addEventListener("mousedown", (e) => {
+	document.addEventListener("mousedown", (e) => {
 		if (PICTAL.State != "preview") return;
 		e.preventDefault();
 
 		if (e.buttons == 1 && !PICTAL.DIV.contains(e.target)) reset();
 	});
 
-	window.addEventListener("wheel", (e) => {
+	document.addEventListener("wheel", (e) => {
 		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
-		if (PICTAL.State == "loading") e.preventDefault();
+		if (PICTAL.State == "loading" || PICTAL.Center) e.preventDefault();
 
 		if (PICTAL.Center && (PICTAL.DIV.contains(e.target) || PICTAL.Files.length == 1)) {
 			e.preventDefault();

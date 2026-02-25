@@ -177,10 +177,15 @@ function onMessage(message, sender, sendResponse) {
 }
 
 async function registerContentScripts() {
-	await chrome.userScripts.configureWorld({
-		csp: "script-src 'self' 'unsafe-eval'",
-		messaging: true
-	});
+	try {
+		await chrome.userScripts.configureWorld({
+			csp: "script-src 'self' 'unsafe-eval'",
+			messaging: true
+		});
+	} catch {
+		chrome.runtime.openOptionsPage();
+		return;
+	}
 
 	await chrome.runtime.onUserScriptMessage?.addListener(onMessage);
 
@@ -191,7 +196,7 @@ async function registerContentScripts() {
 		allFrames: true,
 		matches: ["<all_urls>"],
 		runAt: "document_start",
-		world: "USER_SCRIPT", 
+		world: "USER_SCRIPT",
 		js: [{
 			file: "content/content.js"
 		}],

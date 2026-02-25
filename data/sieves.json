@@ -25,7 +25,8 @@
         "link_regex": "^catbox.moe\\/c/\\w*$",
         "link_request_javascript": "return this.protocol + this.link",
         "link_parse_javascript": "let parser = new DOMParser();\nlet doc = parser.parseFromString(this.body, 'text/html');\nlet album = doc.querySelectorAll(\".imagelist > a[href^='http']\");\nlet images = [];\nalbum.forEach(el => {\n\tlet link = el.href;\n\tlet ext = new URL(link).pathname.split('.').pop();\n\tif (!/^(png|jpe?g|gif|avif|mp[34]|web[mp])$/gi.test(ext)) return;\n\timages.push({\n\t\turl: link,\n\t\tvideo: (ext == 'mp4' || ext == 'webm')\n\t});\n});\nif (!images.length) return false;\nimages[0].caption = '[' + doc.querySelector('.title > h1').textContent + '] ' + doc.querySelectorAll('.title > p')[1].textContent;\nreturn images;",
-        "image_regex": "^files.catbox.moe\\/\\w*\\.\\w*$"
+        "image_regex": "^files.catbox.moe\\/\\w*\\.\\w*$",
+        "notes": "https://www.reddit.com/domain/catbox.moe/new/"
     },
     "danbooru.donmai.us": {
         "enabled": true,
@@ -76,10 +77,12 @@
     },
     "imgur.com": {
         "enabled": true,
-        "link_regex": "^imgur\\.com/(?:a|gallery)/(.*?)/?$",
+        "link_regex": "^imgur\\.com/(?:a/|gallery/)?(.*?)/?$",
         "link_request_javascript": "return this.protocol + 'imgur.com/a/' + this.regex_match[1] + '/embed/hit.json';",
-        "link_parse_javascript": "let parser = new DOMParser();\nlet doc = parser.parseFromString(this.body, 'text/html');\nlet album = doc.querySelectorAll('meta[itemprop=\"contentUrl\"]');\nlet images = [];\nfor (const a in album) {\n\tif (!album[a].content) continue;\n\timages.push({\n\t\turl: this.protocol + album[a].content.substr(2)\n\t});\n}\nimages[0].caption = doc.querySelector('meta[itemprop=\"name\"]').content;\nreturn images;",
-        "image_regex": "^i.imgur.com/.*\\.\\w*$"
+        "link_parse_javascript": "let parser = new DOMParser();\nlet doc = parser.parseFromString(this.body, 'text/html');\nlet album = doc.querySelectorAll('meta[itemprop=\"contentUrl\"]');\nlet images = [];\nfor (const a in album) {\n\tlet url = album[a].content;\n\tif (!url) continue;\n\tif (url[0] == '/') url = this.protocol + album[a].content.substr(2);\n\tlet ext = url.split('.').pop();\n\timages.push({\n\t\turl: url,\n\t\tvideo: (ext == 'mp4')\n\t});\n}\nimages[0].caption = doc.querySelector('meta[itemprop=\"name\"]').content;\nreturn images;",
+        "image_regex": "^i.imgur.com/.*\\.\\w*$",
+        "image_parse_javascript": "return this.protocol + this.link.replace('.gifv', '.mp4');",
+        "notes": "https://www.reddit.com/domain/imgur.com/new"
     },
     "itaku.ee": {
         "enabled": true,
@@ -138,13 +141,14 @@
         "link_request_javascript": "return this.protocol + `${this.regex_match[1]}by_id/t3_${this.regex_match[2]}.json`;",
         "link_parse_javascript": "let $ = JSON.parse(this.body).data.children[0].data;\nlet m = $.media_metadata;\nif (!m) return false;\n\nlet url = m[Object.keys(m)[0]].s.u.replaceAll('amp;', '');\nreturn [{\n\turl: url,\n\tcaption: $.title\n}];",
         "image_regex": "^(?:i|preview)\\.redd\\.it/\\w{13}\\..*",
-        "prioritize_images": true
+        "prioritize_images": true,
+        "notes": "https://www.reddit.com/domain/i.redd.it/new/"
     },
     "reddit.com_video": {
         "enabled": true,
         "link_regex": "^(?:v\\.redd\\.it|(?:[^.]{2,5}\\.)?reddit\\.com/link/[\\da-z]+/video)(/[\\da-z]+).*",
-        "link_request_javascript": "return this.protocol + this.link",
-        "link_parse_javascript": "let $ = this.regex_match;\nreturn [{\n\turl: `https://v.redd.it${$[1]}/DASHPlaylist.mpd`,\n\tvideo: true,\n\tvideojs: true\n}];"
+        "link_parse_javascript": "let $ = this.regex_match;\nreturn [{\n\turl: `https://v.redd.it${$[1]}/DASHPlaylist.mpd`,\n\tvideo: true,\n\tvideojs: true\n}];",
+        "notes": "https://www.reddit.com/domain/v.redd.it/new/"
     },
     "rule34.paheal.net": {
         "enabled": true,
@@ -172,17 +176,22 @@
         "link_request_javascript": "return this.protocol + 'api.streamable.com/videos/' + this.regex_match[1];",
         "link_parse_javascript": "let json = JSON.parse(this.body);\n\nlet url = json.files.mp4.url;\nlet caption = json.title;\n\nreturn [{\n\turl: url,\n\tcaption: caption,\n\tvideo: true\n}];"
     },
+    "wikimedia": {
+        "enabled": true,
+        "link_regex": "^(?:upload\\.wikimedia\\.org|\\w*\\.wikipedia\\.org)/(?:wikipedia/\\w*/(?:\\w*/)?\\S/\\S\\S/(\\S*?\\.\\w*)|wiki/(?:File|ファイル|파일):(\\S+))",
+        "link_request_javascript": "return this.protocol + 'commons.wikimedia.org/w/api.php?action=query&format=json&formatversion=2&prop=imageinfo&iiprop=url|mime|extmetadata&iiextmetadatafilter=ObjectName|ImageDescription&iiextmetadatalanguage=en&titles=File:' + (this.regex_match?.[1] || this.regex_match?.[2]);",
+        "link_parse_javascript": "let json = JSON.parse(this.body);\n\nlet imageinfo = json.query.pages[0].imageinfo[0];\nlet url = imageinfo.url;\nlet caption = imageinfo.extmetadata?.ImageDescription?.value;\nlet mime = imageinfo.mime.split(\"/\")[0];\n\nreturn [{\n\turl: url,\n\tcaption: caption,\n\tvideo: (mime == 'video')\n}];"
+    },
     "x.com_direct-media": {
         "enabled": true,
         "link_regex": "^(?:x|twitter)\\.com/((.*/status/\\d*)/((?:photo|video))/\\d*)",
-        "link_request_javascript": "return this.protocol + this.link",
         "link_parse_javascript": "let $ = this.regex_match;\nlet third_party_site = 'fxtwitter.com';\n\nif ($[3] == \"photo\") {\n\treturn [{\n\t\turl: this.protocol + 'd.' + third_party_site + '/' + $[1]\n\t}];\n}\nif ($[3] == \"video\") {\n\treturn [{\n\t\turl: this.protocol + third_party_site + '/' + $[2] + '.mp4',\n\t\tvideo: true\n\t}];\n}",
         "image_regex": "^(?:pbs|video).twimg.com\\/((?:media|profile_banners|profile_images|card_img|tweet_video_thumb|tweet_video))\\/((?:(\\w*)\\.\\w*)?)",
         "image_parse_javascript": "let $ = this.regex_match;\nlet third_party_site = 'gif.fxtwitter.com';\n\nif ($[1] == 'media') return this.protocol + this.link.split('&name')[0];\nif ($[1] == 'profile_banners') return this.protocol + this.link.replace(/(\\d*x\\d*)/, '1500x500');\nif ($[1] == 'profile_images') return this.protocol + this.link.replace(/(_(?:bigger|normal))/i, '');\nif ($[1] == 'tweet_video_thumb' || $[1] == 'tweet_video') return this.protocol + third_party_site + '/tweet_video/' + $[3] + '.gif';\nreturn this.protocol + this.link;"
     },
     "x.com_tweet": {
         "enabled": true,
-        "link_regex": "^(?:m(?:obile)?\\.)?(?:x|[fv]?x?twitter)\\.com\\/(.*/(\\d*))$",
+        "link_regex": "^(?:m(?:obile)?\\.)?(?:x|[fv]?x?twitter)\\.com\\/(.*/(\\d*))",
         "link_request_javascript": "let third_party_site = 'api.fxtwitter.com';\nreturn this.protocol + third_party_site + '/' + this.regex_match[1];",
         "link_parse_javascript": "let json = JSON.parse(this.body);\nif (json.code != 200) return false;\nlet third_party_site = 'gif.fxtwitter.com';\n\nif (!json.tweet.media) return false;\n\nlet media = json.tweet.media.all;\nlet images = [];\nfor (let m in media) {\n\tlet url = media[m].url;\n\tif (media[m].type == 'gif') url = this.protocol + third_party_site + '/tweet_video/' + url.match(/tweet_video\\/(.*)\\.mp4/i)[1] + '.gif';\n\n\timages.push({\n\t\turl: url,\n\t\tvideo: (media[m].type == 'video')\n\t})\n}\nimages[0].caption = json.tweet.text;\nreturn images;"
     },
