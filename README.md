@@ -12,11 +12,12 @@ Development is primarily focused on Firefox because that is what I use and the p
 
 # How Pictal Works
 
-1. Everytime an element is moused over, it looks for urls in the element, its ancestors, and its cousins.
-2. The gathered urls are compared to the sieves in their alphanumeric order and the first match against a **Link Regex** or **Image Regex** is used.
-3. The selection outline is shown and a timer counts down based on the display delay in the options.
-4. Once the timer hits 0, the loading icon is shown and the url is parsed and processed through the matched section of a sieve and then formatted into an object that Pictal can use.
-5. If the loading icon turns green, it means the returned object passes all the checks and will attempt to display the image/video in the preview. If the loading icon turns red, it means that an error occured or the returned object didn't pass the checks.  
+1. On page load, all your sieves, preferences, and shortcuts are loaded. To see any changes to those you will need to refresh the page.
+2. Everytime an element is moused over, it looks for urls in the element, its ancestors, and its cousins.
+3. The gathered urls are compared to the sieves in their alphanumeric order and the first match against a **Link Regex** or **Image Regex** is used.
+4. The selection outline is shown and a timer counts down based on the display delay in the options.
+5. Once the timer hits 0, the loading icon is shown and the url is parsed and processed through the matched section of a sieve and then formatted into an object that Pictal can use.
+6. If the loading icon turns green, it means the returned object passes all the checks and will attempt to display the image/video in the preview. If the loading icon turns red, it means that an error occured or the returned object didn't pass the checks.  
 
 # Differences Between Pictal and Imagus
 

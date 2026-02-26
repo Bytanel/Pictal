@@ -102,6 +102,7 @@ function addSieve(sieve_name, sieve) {
 				title.textContent += " " + Date.now();
 			}
 		});
+		highlightSaveButton();
 	}
 
 	sieve_config.querySelector("#delete").onclick = function() {
@@ -385,6 +386,7 @@ window.addEventListener("load", function() {
 		if (json) {
 			try {
 				sievesFromJSON(JSON.parse(json));
+				highlightSaveButton();
 			} catch (err) {
 				alert("The imported json is malformed.");
 			}
@@ -401,6 +403,7 @@ window.addEventListener("load", function() {
 		}).then(json => {
 			if (confirm(`Downloaded ${Object.keys(json).length} sieves. Do you wish to import them? Any sieves with the same name will be overwritten.`)) {
 				sievesFromJSON(json);
+				highlightSaveButton();
 			}
 		});
 	}

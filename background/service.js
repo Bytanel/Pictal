@@ -8,9 +8,11 @@ const DefaultPreferences = {
 	selection_delay: 500,
 	video_volume: 50,
 	show_resolution: false,
+	cyclical_albums: false,
+	preload_ahead: true,
 	show_caption: true,
 	wrap_caption: false,
-	preload_ahead: true
+	caption_position: "top"
 };
 
 const DefaultShortcuts = {
