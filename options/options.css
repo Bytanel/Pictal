@@ -1,5 +1,9 @@
 @charset "UTF-8";
 
+#link_filter_javascript, #image_filter_javascript{
+    height: 50px;
+}
+
 #link_request_javascript{
     height: 75px;
 }

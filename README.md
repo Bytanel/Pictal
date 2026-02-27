@@ -39,6 +39,14 @@ This is for general links that aren't themselves media files and links that may 
 
 This determines what links you want looked for when hovering your mouse over html elements.
 
+### Link Filter Javascript
+
+This is for more complex fine tuning that gets run immediately if it passes **Link Regex**. This is mainly for when there are elements that you won't want highlighted. There should not be anything that takes time to execute such as promises or networking in this field.
+
+#### Expected Return
+##### boolean
+    true or false
+
 ### Link Request Javascript
 
 This determines the url that a GET request will be made to and have the body passed to Link Parse Javascript.
@@ -71,7 +79,7 @@ This is where the list of urls you want shown in the preview is created. You hav
 - this.regex_match
 - this.node
 - this.body
-    - the text body from the GET request made to the url from Link Request Javascript, is empty if Link Request Javascript is empty
+    - the text body from the GET request made to the url from **Link Request Javascript**, is empty if **Link Request Javascript** is empty
 - this.passthrough
     - in the case of a loop, you may want to carry over information from the previous execution context so use this
 
@@ -99,6 +107,14 @@ This is for links that are media files and links whose extension you don't know.
 ### Image Regex
 
 This determines what links you want to be looked for when hovering your mouse on html elements.
+
+### Image Filter Javascript
+
+This is the same as **Link Filter Javascript**.
+
+#### Expected Return
+##### boolean
+    true or false
 
 ### Image Parse Javascript
 

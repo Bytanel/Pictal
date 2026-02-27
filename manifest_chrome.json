@@ -11,8 +11,9 @@
   ],
   "permissions": [
     "cookies",
-    "storage",
     "downloads",
+    "history",
+    "storage",
     "userScripts"
   ],
   "host_permissions": [

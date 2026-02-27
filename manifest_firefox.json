@@ -21,8 +21,9 @@
   ],
   "permissions": [
     "cookies",
-    "storage",
-    "downloads"
+    "downloads",
+    "history",
+    "storage"
   ],
   "optional_permissions": [
     "userScripts"

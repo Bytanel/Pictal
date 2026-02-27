@@ -8,8 +8,9 @@ const DefaultPreferences = {
 	selection_delay: 500,
 	video_volume: 50,
 	show_resolution: false,
-	cyclical_albums: false,
 	preload_ahead: true,
+	add_hovered_to_history: false,
+	cyclical_albums: false,
 	show_caption: true,
 	wrap_caption: false,
 	caption_position: "top"
@@ -19,6 +20,8 @@ const DefaultShortcuts = {
 	zoom_in: "z",
 	wrap_caption: "c",
 	open_image_in_new_tab: "o",
+	add_to_history: "h",
+	save_image: "",
 	close_preview: "",
 	open_options: "p",
 	flip_horizontal: "w",
@@ -171,6 +174,13 @@ function onMessage(message, sender, sendResponse) {
 		});
 
 		return true;
+	}
+	if (message.type == "AddToHistory") {
+		if (chrome.extension?.inIncognitoContext || sender.tab?.incognito) return;
+		chrome.history.addUrl({
+			url: message.url
+		});
+		return;
 	}
 	if (message.type == "ReloadScript") {
 		registerContentScripts();

@@ -61,7 +61,7 @@
         "enabled": true,
         "link_regex": "^(e(?:621|926)\\.net)/pools/(\\d+)",
         "link_request_javascript": "return this.protocol + this.regex_match[1] + '/posts.json?tags=pool:' + this.regex_match[2];",
-        "link_parse_javascript": "let json = JSON.parse(this.body).posts;\nif (!json) return false;\n\nlet images = [];\nfor (let i = json.length - 1; i >= 0; i--) {\n\tlet file = json[i].file;\n\timages.push({\n\t\turl: file.url,\n\t\tvideo: (file.ext == 'mp4' || file.ext == 'webm')\n\t});\n}\nreturn images;",
+        "link_parse_javascript": "let json = JSON.parse(this.body);\nif (!json) return false;\n\n// get the order of posts in the pool through a separate endpoint\nif (!json.id) {\n    return {\n        loop: this.protocol + this.regex_match[1] + '/pools/' + this.regex_match[2] + '.json',\n        passthrough: json.posts\n    };\n}\n\nlet images = [];\nfor (const id of json.post_ids) {\n    let post = this.passthrough.find(f => f.id == id);\n    if (!post?.file) continue; // there can be deleted posts in a pool\n    images.push({\n    \turl: post.file.url,\n    \tcaption: post.description,\n    \tvideo: (post.file.ext == 'mp4' || post.file.ext == 'webm')\n    });\n}\n\nreturn images;",
         "image_regex": "^(static\\d.e(?:621|926|6ai)\\.net/data/)(preview/)?(\\w+/\\w+/\\w+\\.)\\w+"
     },
     "furaffinity.net": {
@@ -83,11 +83,17 @@
         "image_parse_javascript": "return this.protocol + this.link.replace(\"/blob/\", \"/raw/\");",
         "prioritize_images": true
     },
+    "imgchest.com": {
+        "enabled": true,
+        "link_regex": "^imgchest.com/p/\\w+",
+        "link_request_javascript": "return this.protocol + this.link;",
+        "link_parse_javascript": "let parser = new DOMParser();\nlet doc = parser.parseFromString(this.body, 'text/html');\nlet json = JSON.parse(doc.getElementById('app').getAttribute('data-page'));\n\nlet images = json.props.post.files.map(f => {\n\treturn {\n\t\turl: f.link,\n\t\tcaption: f.description,\n\t\tvideo: (f.mp4 == 1)\n\t}\n});\n\nreturn images;"
+    },
     "imgur.com": {
         "enabled": true,
         "link_regex": "^imgur\\.com/(?:(a|gallery)/)?(.*?)/?$",
         "link_request_javascript": "if (this.regex_match[1]) return this.protocol + 'imgur.com/a/' + this.regex_match[2] + '/embed/hit.json';\nreturn this.protocol + this.link;",
-        "link_parse_javascript": "if (!this.regex_match[1]) {\n\tlet parser = new DOMParser();\n\tlet doc = parser.parseFromString(this.body, 'text/html');\n\tlet url = doc.querySelector('meta[property=\"og:image\"]').content;\n\tlet caption = doc.querySelector('meta[property=\"og:title\"]').content;\n\treturn [{\n\t\turl: url,\n\t\tcaption: caption\n\t}];\n}\n\n\nlet json = JSON.parse(this.body.match(/item: ({.+})\\n/)[1]);\nlet album = json.album_images.images;\n\nconsole.log(album);\n\nlet images = [];\nfor (const a of album) {\n\tlet url = this.protocol + 'i.imgur.com/' + a.hash + a.ext;\n\tlet caption = a.description;\n\timages.push({\n\t\turl: url,\n\t\tcaption: caption,\n\t\tvideo: (a.ext == '.mp4')\n\t});\n}\nreturn images;",
+        "link_parse_javascript": "if (!this.regex_match[1]) {\n\tlet parser = new DOMParser();\n\tlet doc = parser.parseFromString(this.body, 'text/html');\n\tlet url = doc.querySelector('meta[property=\"og:image\"]').content;\n\tlet caption = doc.querySelector('meta[property=\"og:title\"]').content;\n\treturn [{\n\t\turl: url,\n\t\tcaption: caption\n\t}];\n}\n\n\nlet json = JSON.parse(this.body.match(/item: ({.+})\\n/)[1]);\nlet album = json.album_images.images;\n\nlet images = [];\nfor (const a of album) {\n\tlet url = this.protocol + 'i.imgur.com/' + a.hash + a.ext;\n\tlet caption = a.description;\n\timages.push({\n\t\turl: url,\n\t\tcaption: caption,\n\t\tvideo: (a.ext == '.mp4')\n\t});\n}\nreturn images;",
         "image_regex": "^i.imgur.com/.*\\.\\w*$",
         "image_parse_javascript": "return this.protocol + this.link.replace('.gifv', '.mp4');",
         "notes": "https://www.reddit.com/domain/imgur.com/new"
@@ -131,6 +137,12 @@
         "image_regex": "^t\\d?\\.(nhentai\\.net/galleries/\\d+/\\d+)t\\.(.+)$",
         "image_parse_javascript": "var ext = '.webp';\nif (this.regex_match[2] != 'webp') {\n\text = '.' + this.regex_match[2].split('.')[0];\n}\nreturn this.protocol + 'i.' + this.regex_match[1] + ext;"
     },
+    "nozomi.la": {
+        "enabled": true,
+        "image_regex": "^qtn.(gold-usergeneratedcontent.net/\\w/\\w\\w/\\w+)\\.(.\\w+)",
+        "image_parse_javascript": "let $ = this.regex_match;\n\nif ($[2] == 'mp4') {\n\treturn this.protocol + 'v.' + $[1] + '.mp4';\n}\nreturn this.protocol + 'w.' + $[1] + '.webp';",
+        "prioritize_images": true
+    },
     "pixiv.net": {
         "enabled": true,
         "link_regex": "^(pixiv\\.net/)(?:(?:\\w\\w/)?artworks/|member_illust\\.php\\?mode=(?:[^&]+&)+?illust_id=)(\\d+).*",
@@ -153,9 +165,10 @@
     },
     "reddit.com_thumbs": {
         "enabled": true,
-        "link_regex": "^((?:old\\.)reddit\\.com/)\\w/\\w+/comments/([a-z0-9]{7})/?",
+        "link_regex": "^((?:old\\.)?reddit\\.com/)\\w/\\w+/comments/([a-z0-9]{7})/?",
+        "link_filter_javascript": "if (this.node.classList.contains(\"comments\")) return false;\nreturn (this.node.closest(\".thing\")?.getElementsByTagName(\"img\").length > 0) || (this.node.closest(\"article\")?.getElementsByClassName(\"preview-img\").length > 0);",
         "link_request_javascript": "return this.protocol + `${this.regex_match[1]}by_id/t3_${this.regex_match[2]}.json`;",
-        "link_parse_javascript": "let $ = JSON.parse(this.body).data.children[0].data;\nlet m = $.media_metadata;\nif (!m) return false;\n\nlet url = m[Object.keys(m)[0]].s.u.replaceAll('amp;', '');\nreturn [{\n\turl: url,\n\tcaption: $.title\n}];",
+        "link_parse_javascript": "let json = JSON.parse(this.body).data.children[0].data;\nlet url;\nif (json.media_metadata) {\n\turl = json.media_metadata[Object.keys(json.media_metadata)[0]].s.u.replaceAll('amp;', '');\n} else if (json.preview) {\n\turl = json.url_overridden_by_dest;\n}\n\nreturn [{\n\turl: url,\n\tcaption: json.title\n}];",
         "image_regex": "^(?:i|preview)\\.redd\\.it/\\w{13}\\..*",
         "prioritize_images": true,
         "notes": "https://www.reddit.com/domain/i.redd.it/new/"
@@ -191,6 +204,11 @@
         "link_regex": "^(safebooru\\.org|xbooru\\.com)/index\\.php\\?page=post&s=view&id=(\\d+)",
         "link_request_javascript": "let $ = this.regex_match;\nreturn this.protocol + $[1] + '/index.php?page=dapi&s=post&q=index&id=' + $[2];",
         "link_parse_javascript": "let parser = new DOMParser();\nlet doc = parser.parseFromString(this.body, 'text/xml');\n\nlet el = doc.firstChild.firstChild;\nlet url = el.getAttribute('file_url');\nlet caption = el.getAttribute('tags');\nlet ext = url.split('.').pop();\n\nreturn [{\n\turl: url,\n\tcaption: caption,\n\tvideo: (ext == 'mp4' || ext == 'webm')\n}];"
+    },
+    "store.steampowered.com": {
+        "enabled": true,
+        "image_regex": "^(shared.fastly.steamstatic.com/store_item_assets/steam/apps/\\d*/(\\S*?))\\.",
+        "image_parse_javascript": "let $ = this.regex_match;\nif ($[2] == 'movie') {\n\treturn this.protocol + $[1] + '_max.mp4';\n}\nreturn this.protocol + $[1] + '.jpg';"
     },
     "streamable.com": {
         "enabled": true,

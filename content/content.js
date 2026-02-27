@@ -140,7 +140,8 @@ function loadPictal() {
 		Volume: 0,
 		Files: [],
 		FileIndex: 0,
-		FileCache: [],
+		HoverURLCache: {},
+		FileURLCached: {},
 		Scale: [1, 1],
 		Rotation: 0,
 		ViewMode: "default",
@@ -188,15 +189,13 @@ function loadPictal() {
 			border-radius: 2px;
 			box-shadow: rgb(102, 102, 102) 0px 0px 2px;
 			transition: all;
-			visibility: visible;
-			opacity: 0;
 			z-index: 2147483646;
 			width: 0;
 			height: 0;
-			position: fixed !important;   
+			position: fixed !important;
+			display: none;
 			inset: 0;
 			pointer-events: none;
-			opacity: 0;
 		`;
 
 		PICTAL.IMG = document.createElement("img");
@@ -207,18 +206,20 @@ function loadPictal() {
         	height: 100%;
         	cursor: zoom-in;
 		`;
-		PICTAL.IMG.onloadeddata = () => {
+		PICTAL.IMG.onloadeddata = function (src) {
 			if (PICTAL.State != "loading") return;
 
-			PICTAL.LOADER.style.opacity = "0";
-			PICTAL.DIV.style.opacity = "1";
-			PICTAL.IMG.style.display = "block";
+			PICTAL.LOADER.style.display = "none";
+			PICTAL.DIV.style.display = "initial";
+			PICTAL.IMG.style.display = "initial";
 			PICTAL.State = "preview";
+			PICTAL.FileURLCached[src] = true;
 
+			fileLoaded();
 			renderFrame();
 		};
-		PICTAL.IMG.addEventListener("load", function() {
-			PICTAL.IMG.onloadeddata();
+		PICTAL.IMG.addEventListener("load", function (e) {
+			PICTAL.IMG.onloadeddata(e.target.src);
 			if (!PICTAL.Preferences["preload_ahead"]) return;
 
 			for (let i = PICTAL.FileIndex; i <= PICTAL.FileIndex + 2; i++) {
@@ -231,7 +232,7 @@ function loadPictal() {
 				imagePreloader.src = file.url;
 			}
 		}, false);
-		PICTAL.IMG.addEventListener("error", function() {
+		PICTAL.IMG.addEventListener("error", function () {
 			clearInterval(PICTAL.IMGTIMER);
 
 			PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
@@ -245,17 +246,16 @@ function loadPictal() {
 		PICTAL.VIDEO.preload = "auto";
 		PICTAL.VIDEO.volume = PICTAL.Volume;
 		PICTAL.VIDEO.style.cssText = `
-			display: none;
+        	display: none;
 			width: 100%;
 			height: 100%;
 			cursor: zoom-in;
 		`;
-		PICTAL.VIDEO.onloadedmetadata = function(e) {
+		PICTAL.VIDEO.onloadedmetadata = function (e) {
 			if (PICTAL.State != "loading") return;
 
-
 			if (PICTAL.Files[PICTAL.FileIndex].videojs) {
-				PICTAL.VIDEOJS.el().style.display = "block";
+				PICTAL.VIDEOJS.el().style.display = "initial";
 				PICTAL.VIDEOJS.loop(PICTAL.VIDEOJS.duration() <= 60);
 				PICTAL.VIDEOJS.muted(PICTAL.Muted);
 				PICTAL.VIDEOJS.volume(PICTAL.Volume);
@@ -266,7 +266,7 @@ function loadPictal() {
 				});
 			} else {
 				PICTAL.VIDEO.loop = (PICTAL.VIDEO.duration <= 60);
-				PICTAL.VIDEO.style.display = "block";
+				PICTAL.VIDEO.style.display = "initial";
 				PICTAL.VIDEO.volume = PICTAL.Volume;
 				PICTAL.VIDEO.play().catch(() => {
 					PICTAL.VIDEO.muted = true;
@@ -275,12 +275,15 @@ function loadPictal() {
 				});
 			}
 
-			PICTAL.LOADER.style.opacity = "0";
-			PICTAL.DIV.style.opacity = "1";
+			PICTAL.LOADER.style.display = "none";
+			PICTAL.DIV.style.display = "initial";
 			PICTAL.State = "preview";
+			//PICTAL.FileURLCached[PICTAL.Files[PICTAL.FileIndex]] = true;
+			
+			fileLoaded();
 			renderFrame();
 		};
-		PICTAL.VIDEO.onvolumechange = function(e) {
+		PICTAL.VIDEO.onvolumechange = function (e) {
 			if (PICTAL.State != "preview") return;
 			if (e.target.localName == "video") {
 				PICTAL.Volume = PICTAL.VIDEO.volume;
@@ -293,7 +296,6 @@ function loadPictal() {
 		PICTAL.DIV.appendChild(PICTAL.VIDEO);
 
 		PICTAL.HEADER = document.createElement("div");
-		PICTAL.HEADER.id = "pictal-header";
 		PICTAL.HEADER.style.cssText = `
 			position: absolute;
 			white-space: ${PICTAL.Preferences["wrap_caption"] || "nowrap"};
@@ -304,13 +306,12 @@ function loadPictal() {
 			color: rgb(255, 255, 255) !important;
 			top: -25px;
 			font: 13px/1.4em "Trebuchet MS", sans-serif;
-			opacity: 0;
 		`;
 		PICTAL.DIV.appendChild(PICTAL.HEADER);
 
 		PICTAL.PAGINATOR = document.createElement("b");
 		PICTAL.PAGINATOR.style.cssText = `
-			display: none;
+			display: inline-block;
 			transition: background-color 0.1s;
 			border-radius: 3px;
 			padding: 0px 2px;
@@ -321,15 +322,15 @@ function loadPictal() {
 
 		PICTAL.RESOLUTION = document.createElement("b");
 		PICTAL.RESOLUTION.style.cssText = `
-			display: none;
+			display: inline-block;
 			color: rgb(120, 210, 255);
 		`;
 		PICTAL.HEADER.appendChild(PICTAL.RESOLUTION);
 
 		PICTAL.CAPTION = document.createElement("span");
 		PICTAL.CAPTION.style.cssText = `
+			display: inline;
 			color: inherit;
-			display: none;
 		`;
 		PICTAL.HEADER.appendChild(PICTAL.CAPTION);
 	}
@@ -358,10 +359,9 @@ function loadPictal() {
 		height: 38px;
 		position: fixed !important;
 		z-index: 2147483647;
-		display: block;
+		display: none;
 		inset: 0;
 		margin: 0;
-		opacity: 0;
 		pointer-events: none;
 	`;
 	PICTAL.LOADER.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOng9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWluWU1pbiBub25lIj48Zz48cGF0aCBpZD0icCIgZD0iTTMzIDQyYTEgMSAwIDAgMSA1NS0yMCAzNiAzNiAwIDAgMC01NSAyMCIvPjx1c2UgeDpocmVmPSIjcCIgdHJhbnNmb3JtPSJyb3RhdGUoNzIgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgxNDQgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgyMTYgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgyODggNTAgNTApIi8+PGFuaW1hdGVUcmFuc2Zvcm0gYXR0cmlidXRlTmFtZT0idHJhbnNmb3JtIiB0eXBlPSJyb3RhdGUiIHZhbHVlcz0iMzYwIDUwIDUwOzAgNTAgNTAiIGR1cj0iMS44cyIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48L2c+PC9zdmc+";
@@ -370,7 +370,7 @@ function loadPictal() {
 	function updateLoader() {
 		if (PICTAL.State != "loading") return;
 
-		PICTAL.LOADER.style.opacity = "1";
+		PICTAL.LOADER.style.display = "initial";
 		if (PICTAL.Center) {
 			const minHeight = 15;
 			const maxHeight = window.innerHeight - 15 - minHeight;
@@ -384,15 +384,65 @@ function loadPictal() {
 		}
 	}
 
+	function getResolution() {
+		let elHeight, elWidth;
+		const file = PICTAL.Files[PICTAL.FileIndex];
+
+		if (file.video) {
+			if (file.videojs) {
+				elHeight = PICTAL.VIDEOJS.videoHeight();
+				elWidth = PICTAL.VIDEOJS.videoWidth();
+			} else {
+				elHeight = PICTAL.VIDEO.videoHeight;
+				elWidth = PICTAL.VIDEO.videoWidth;
+			}
+		} else {
+			elHeight = PICTAL.IMG.naturalHeight;
+			elWidth = PICTAL.IMG.naturalWidth;
+		}
+		elHeight = Math.floor(elHeight);
+		elWidth = Math.floor(elWidth);
+
+		return [elWidth, elHeight];
+	}
+
+	function fileLoaded() {
+		const file = PICTAL.Files[PICTAL.FileIndex];
+		const [elHeight, elWidth] = getResolution();
+
+		PICTAL.HEADER.style.display = (PICTAL.Files.length > 1 || file.caption || PICTAL.Preferences["show_resolution"]) ? "block" : "none";
+		if (PICTAL.Files.length > 1) {
+			PICTAL.PAGINATOR.style.display = "initial";
+			PICTAL.PAGINATOR.innerText = `${PICTAL.FileIndex+1} / ${PICTAL.Files.length}`;
+		} else {
+			PICTAL.PAGINATOR.style.display = "none";
+		}
+		if (PICTAL.Preferences["show_resolution"]) {
+			PICTAL.RESOLUTION.style.display = "initial";
+			PICTAL.RESOLUTION.innerText = `${elWidth}x${elHeight}`;
+			PICTAL.RESOLUTION.style.marginLeft = (PICTAL.Files.length > 1 ? "4px" : "0px");
+		} else {
+			PICTAL.RESOLUTION.style.display = "none";
+		}
+		if (file.caption && PICTAL.Preferences["show_caption"]) {
+			PICTAL.CAPTION.style.display = "initial";
+			PICTAL.CAPTION.innerText = file.caption.replace(/[\n\r]+/g, " ");
+			PICTAL.CAPTION.style.marginLeft = ((PICTAL.Files.length > 1 || PICTAL.Preferences["show_resolution"]) ? "4px" : "0px");
+		} else {
+			PICTAL.CAPTION.style.display = "none";
+		}
+	}
+
 	function loadPreviewFiles(fullURL = null) {
 		if (fullURL) {
-			PICTAL.FileCache[fullURL] = PICTAL.Files;
+			PICTAL.HoverURLCache[fullURL] = PICTAL.Files;
 		}
 
 		const file = PICTAL.Files[PICTAL.FileIndex];
 		if (PICTAL.VIDEO.src == file.url || PICTAL.VIDEOJS?.currentSrc() || file.url == PICTAL.IMG.src) return;
 
 		clearInterval(PICTAL.IMGTIMER);
+		PICTAL.DIV.style.display = "none";
 		PICTAL.CenterZoom = .75;
 		PICTAL.IMG.style.display = "none";
 		PICTAL.IMG.removeAttribute("src");
@@ -405,6 +455,8 @@ function loadPictal() {
 		PICTAL.VIDEOJS?.dispose(); // resetting or changing src is way too slow so just delete and recreate the object
 		PICTAL.VIDEOJS = null;
 
+		PICTAL.State = "loading";
+
 		if (file.video) {
 			if (file.videojs) {
 				setupVideoJS();
@@ -416,16 +468,17 @@ function loadPictal() {
 			}
 		} else {
 			PICTAL.IMG.src = file.url;
-			PICTAL.IMGTIMER = setInterval(function() { // faster than waiting for the entire image to load before showing preview
-				if (PICTAL.IMG.naturalWidth) {
-					clearInterval(PICTAL.IMGTIMER);
-					PICTAL.IMG.onloadeddata();
-				}
-			}, 100);
+			if (PICTAL.FileURLCached[file.url]) {
+				PICTAL.IMG.onloadeddata(file.url);
+			} else {
+				PICTAL.IMGTIMER = setInterval(function () { // faster than waiting for the entire image to load before showing preview
+					if (PICTAL.IMG.naturalWidth) {
+						clearInterval(PICTAL.IMGTIMER);
+						PICTAL.IMG.onloadeddata(file.url);
+					}
+				}, 100);
+			}
 		}
-
-		PICTAL.State = "loading";
-		PICTAL.HEADER.style.opacity = (PICTAL.Files.length > 1 || PICTAL.Files[PICTAL.FileIndex].caption || PICTAL.Preferences["show_resolution"]) ? "1" : "0";
 	}
 
 	function setupTimer(sieve, target, targetURL) {
@@ -437,18 +490,25 @@ function loadPictal() {
 		};
 
 		const fullURL = targetURL[1] + targetURL[2];
+		if (PICTAL.HoverURLCache[fullURL]) {
+			PICTAL.Files = PICTAL.HoverURLCache[fullURL];
+			PICTAL.State = "loading";
+			loadPreviewFiles(fullURL);
+			return;
+		}
 
+		// on timeout, start handling the link and loading the preview media
 		PICTAL.HoverTimer = setTimeout(() => {
 			PICTAL.State = "loading";
-			updateLoader();
 			createPreviewElements();
+			updateLoader();
 
-			if (PICTAL.FileCache[fullURL]) {
-				PICTAL.Files = PICTAL.FileCache[fullURL];
-				loadPreviewFiles();
-				return;
+			if (PICTAL.Preferences["add_hovered_to_history"]) {
+				chrome.runtime.sendMessage({
+					type: "AddToHistory",
+					url: fullURL
+				});
 			}
-
 
 			if (targetURL[0] == "link") {
 				let request_url = fullURL;
@@ -475,6 +535,7 @@ function loadPictal() {
 						return;
 					}
 				}
+
 
 				function runParseJavascript(body, passthrough = {}) {
 					try {
@@ -636,12 +697,22 @@ function loadPictal() {
 		}, PICTAL.Preferences["selection_delay"]);
 	}
 
-	function sieveURLs(urls, type, regex) {
+	function checkSieveURLs(urls, type, regex, filter_javascript, target) {
 		const linkRegex = new RegExp(regex, "i");
 		for (const e of urls) {
 			if (!protocolRegex.test(e)) continue;
 			const [, protocol, url] = e.match(protocolRegex);
 			if (linkRegex.test(url)) {
+				if (filter_javascript) {
+					const pass = Function(`'use strict';` + filter_javascript).bind({
+						protocol: protocol,
+						link: url,
+						regex: linkRegex,
+						regex_match: url.match(linkRegex),
+						node: target
+					})();
+					if (pass != true) return null;
+				}
 				return [type, protocol, url];
 			}
 		};
@@ -649,6 +720,8 @@ function loadPictal() {
 	}
 
 	document.addEventListener("mousemove", (e) => {
+		if (PICTAL.State == "idle") return;
+
 		PICTAL.MouseX = e.clientX;
 		PICTAL.MouseY = e.clientY;
 
@@ -722,29 +795,30 @@ function loadPictal() {
 		if (urls.size == 1 && urls.has(null)) return;
 
 		// look for link regex and image regex matches and use the first match
-		let sieve = null;
+		let targetSieve = null;
 		let targetURL = null;
 		for (const s in PICTAL.Sieves) {
-			if (!PICTAL.Sieves[s].enabled) continue;
+			let sieve = PICTAL.Sieves[s];
+			if (!sieve.enabled) continue;
 
-			if (PICTAL.Sieves[s].prioritize_images) {
-				if (PICTAL.Sieves[s].image_regex) {
-					targetURL = sieveURLs(urls, "image", PICTAL.Sieves[s].image_regex);
+			if (sieve.prioritize_images) {
+				if (sieve.image_regex) {
+					targetURL = checkSieveURLs(urls, "image", sieve.image_regex, sieve.image_filter_javascript, target);
 				}
-				if (!targetURL && PICTAL.Sieves[s].link_regex) {
-					targetURL = sieveURLs(urls, "link", PICTAL.Sieves[s].link_regex);
+				if (!targetURL && sieve.link_regex) {
+					targetURL = checkSieveURLs(urls, "link", sieve.link_regex, sieve.link_filter_javascript, target);
 				}
 			} else {
-				if (PICTAL.Sieves[s].link_regex) {
-					targetURL = sieveURLs(urls, "link", PICTAL.Sieves[s].link_regex);
+				if (sieve.link_regex) {
+					targetURL = checkSieveURLs(urls, "link", sieve.link_regex, sieve.link_filter_javascript, target);
 				}
-				if (!targetURL && PICTAL.Sieves[s].image_regex) {
-					targetURL = sieveURLs(urls, "image", PICTAL.Sieves[s].image_regex);
+				if (!targetURL && sieve.image_regex) {
+					targetURL = checkSieveURLs(urls, "image", sieve.image_regex, sieve.image_filter_javascript, target);
 				}
 			}
 
 			if (targetURL) {
-				sieve = PICTAL.Sieves[s];
+				targetSieve = sieve;
 				break;
 			}
 		}
@@ -759,7 +833,7 @@ function loadPictal() {
 
 			updateOutline();
 
-			setupTimer(sieve, target, targetURL);
+			setupTimer(targetSieve, target, targetURL);
 		}
 	});
 
@@ -784,29 +858,14 @@ function loadPictal() {
 
 		// hide preview when switching between files in a gallery
 		if (PICTAL.State == "loading") {
-			PICTAL.DIV.style.opacity = "0";
+			PICTAL.DIV.style.display = "none";
 			updateLoader();
 			requestAnimationFrame(renderFrame);
 			return;
 		}
 
 		// get actual image resolution
-		let elHeight, elWidth;
-		if (PICTAL.Files[PICTAL.FileIndex].video) {
-			if (PICTAL.Files[PICTAL.FileIndex].videojs) {
-				elHeight = PICTAL.VIDEOJS.videoHeight();
-				elWidth = PICTAL.VIDEOJS.videoWidth();
-			} else {
-				elHeight = PICTAL.VIDEO.videoHeight;
-				elWidth = PICTAL.VIDEO.videoWidth;
-			}
-		} else {
-			elHeight = PICTAL.IMG.naturalHeight;
-			elWidth = PICTAL.IMG.naturalWidth;
-		}
-		elHeight = Math.floor(elHeight);
-		elWidth = Math.floor(elWidth);
-
+		const [elWidth, elHeight] = getResolution();
 
 		// bounds of the page
 		let heightBoundsTop = 0;
@@ -922,28 +981,6 @@ function loadPictal() {
 			}
 		}
 
-		if (PICTAL.Files.length > 1) {
-			PICTAL.PAGINATOR.style.display = "inline-block";
-			PICTAL.PAGINATOR.innerText = `${PICTAL.FileIndex+1} / ${PICTAL.Files.length}`;
-		} else {
-			PICTAL.PAGINATOR.style.display = "none";
-		}
-		if (PICTAL.Preferences["show_resolution"]) {
-			PICTAL.RESOLUTION.style.display = "inline-block";
-			PICTAL.RESOLUTION.innerText = `${elWidth}x${elHeight}`;
-			PICTAL.RESOLUTION.style.marginLeft = (PICTAL.Files.length > 1 ? "4px" : "0px");
-		} else {
-			PICTAL.RESOLUTION.style.display = "none";
-		}
-		if (PICTAL.Files[PICTAL.FileIndex].caption && PICTAL.Preferences["show_caption"]) {
-			PICTAL.CAPTION.style.display = "inline";
-			PICTAL.CAPTION.innerText = PICTAL.Files[PICTAL.FileIndex].caption.replace(/[\n\r]+/g, " ");
-			PICTAL.CAPTION.style.marginLeft = ((PICTAL.Files.length > 1 || PICTAL.Preferences["show_resolution"]) ? "4px" : "0px");
-		} else {
-			PICTAL.CAPTION.innerText = "";
-			PICTAL.CAPTION.style.display = "none";
-		}
-
 		requestAnimationFrame(renderFrame);
 	}
 
@@ -955,7 +992,7 @@ function loadPictal() {
 		}
 
 		PICTAL.OUTLINE.style.opacity = "0";
-		PICTAL.LOADER.style.opacity = "0";
+		PICTAL.LOADER.style.display = "none";
 		PICTAL.LOADER.style.backgroundColor = "rgb(255, 255, 255)";
 		PICTAL.CenterZoom = .75;
 		PICTAL.Center = false;
@@ -970,9 +1007,8 @@ function loadPictal() {
 		if (!PICTAL.DIV) return;
 
 		PICTAL.DIV.style.pointerEvents = "none";
-		PICTAL.DIV.style.opacity = "0";
+		PICTAL.DIV.style.display = "none";
 		PICTAL.DIV.style.transform = `rotate(${PICTAL.Rotation}deg)`;
-		PICTAL.IMG.style.display = "none";
 		PICTAL.IMG.removeAttribute("src");
 		PICTAL.IMG.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
 		clearInterval(PICTAL.IMGTIMER);
@@ -983,7 +1019,9 @@ function loadPictal() {
 	}
 
 	document.addEventListener("mouseout", (e) => {
-		if (PICTAL.State != "idle" && !PICTAL.Center) reset();
+		if (PICTAL.State != "idle" && !PICTAL.Center && !PICTAL.TargetedElement.contains(e.relatedTarget)) {
+			reset();
+		}
 	});
 
 	document.addEventListener("blur", () => {
@@ -1000,6 +1038,8 @@ function loadPictal() {
 	});
 
 	window.addEventListener("keydown", (e) => {
+		if (e.target.isContentEditable || e.target.localName == "input") return;
+
 		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"]) {
 			PICTAL.isHoldingActivateKey = true;
 		}
@@ -1043,88 +1083,89 @@ function loadPictal() {
 				updateLoader();
 			}
 
-			if (PICTAL.State != "preview") return;
-
-			if (e.key == PICTAL.Shortcuts.open_image_in_new_tab) {
-				window.open(file.url, "_blank");
-			}
-
-			if (e.key == PICTAL.Shortcuts.wrap_caption) {
-				if (PICTAL.HEADER.style.whiteSpace == "nowrap") {
-					PICTAL.HEADER.style.whiteSpace = "pre-line";
-				} else {
-					PICTAL.HEADER.style.whiteSpace = "nowrap";
+			if (PICTAL.State == "preview") {
+				if (e.key == PICTAL.Shortcuts.open_image_in_new_tab) {
+					window.open(file.url, "_blank");
 				}
-			}
 
-			if (e.key == PICTAL.Shortcuts.open_options) {
-				chrome.runtime.sendMessage({
-					type: "OpenOptions"
-				});
-			}
-
-			if (e.key == PICTAL.Shortcuts.flip_vertical || e.key == PICTAL.Shortcuts.flip_horizontal) {
-				let i = Number(e.key == PICTAL.Shortcuts.flip_vertical);
-				PICTAL.Scale[i] = -1 * PICTAL.Scale[i];
-				if (file.video) {
-					if (file.videojs) {
-						PICTAL.VIDEOJS.el().style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
+				if (e.key == PICTAL.Shortcuts.wrap_caption) {
+					if (PICTAL.HEADER.style.whiteSpace == "nowrap") {
+						PICTAL.HEADER.style.whiteSpace = "pre-line";
 					} else {
-						PICTAL.VIDEO.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
+						PICTAL.HEADER.style.whiteSpace = "nowrap";
 					}
-				} else {
-					PICTAL.IMG.style.transform = `scale(${PICTAL. Scale[0]}, ${PICTAL.Scale[1]})`;
 				}
-			}
 
-			if (e.key == PICTAL.Shortcuts.rotate_left || e.key == PICTAL.Shortcuts.rotate_right) {
-				PICTAL.Rotation += (e.key == PICTAL.Shortcuts.rotate_right ? 90 : -90);
-				PICTAL.DIV.style.transform = `rotate(${PICTAL.Rotation}deg)`;
-				PICTAL.HEADER.style.opacity = PICTAL.Rotation % 360 ? 0 : 1;
-			}
-
-			if (PICTAL.Files.length > 1) {
-				if (e.key == "Home" || e.key == "End") {
-					PICTAL.FileIndex = (e.key == "Home" ? 0 : PICTAL.Files.length - 1);
-					loadPreviewFiles();
+				if (e.key == PICTAL.Shortcuts.open_options) {
+					chrome.runtime.sendMessage({
+						type: "OpenOptions"
+					});
 				}
-			}
 
-			if (file.video) {
-				if (e.key == "ArrowUp" || e.key == "ArrowDown") {
-					if (e.key == "ArrowUp") {
-						if (PICTAL.VIDEO.muted) {
-							PICTAL.VIDEO.muted = false;
-							PICTAL.VIDEO.volume = 0;
-							if (file.videojs) PICTAL.VIDEOJS.muted(false);
+				if (e.key == PICTAL.Shortcuts.add_to_history) {
+					chrome.runtime.sendMessage({
+						type: "AddToHistory",
+						url: file.url
+					});
+				}
+
+				if (e.key == PICTAL.Shortcuts.flip_vertical || e.key == PICTAL.Shortcuts.flip_horizontal) {
+					let i = Number(e.key == PICTAL.Shortcuts.flip_vertical);
+					PICTAL.Scale[i] = -1 * PICTAL.Scale[i];
+					if (file.video) {
+						if (file.videojs) {
+							PICTAL.VIDEOJS.el().style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
+						} else {
+							PICTAL.VIDEO.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
+						}
+					} else {
+						PICTAL.IMG.style.transform = `scale(${PICTAL. Scale[0]}, ${PICTAL.Scale[1]})`;
+					}
+				}
+
+				if (e.key == PICTAL.Shortcuts.rotate_left || e.key == PICTAL.Shortcuts.rotate_right) {
+					PICTAL.Rotation += (e.key == PICTAL.Shortcuts.rotate_right ? 90 : -90);
+					PICTAL.DIV.style.transform = `rotate(${PICTAL.Rotation}deg)`;
+					PICTAL.HEADER.style.display = PICTAL.Rotation % 360 ? "none" : "block";
+				}
+
+				if (PICTAL.Files.length > 1) {
+					if (e.key == "Home" || e.key == "End") {
+						PICTAL.FileIndex = (e.key == "Home" ? 0 : PICTAL.Files.length - 1);
+						loadPreviewFiles();
+					}
+				}
+
+				if (file.video) {
+					if (e.key == "ArrowUp" || e.key == "ArrowDown") {
+						if (e.key == "ArrowUp") {
+							if (PICTAL.VIDEO.muted) {
+								PICTAL.VIDEO.muted = false;
+								PICTAL.VIDEO.volume = 0;
+								if (file.videojs) PICTAL.VIDEOJS.muted(false);
+							}
+						}
+						PICTAL.VIDEO.volume = clamp(PICTAL.VIDEO.volume + (e.key == "ArrowUp" ? .05 : -.05), 0, 1);
+						if (file.videojs) PICTAL.VIDEOJS.volume(PICTAL.VIDEO.volume);
+					}
+
+					if (e.key == "PageUp" || e.key == "PageDown") {
+						let time = (e.key == "PageUp" ? 1 : -1) * .04;
+						if (file.videojs) {
+							PICTAL.VIDEOJS.pause();
+							PICTAL.VIDEOJS.currentTime(PICTAL.VIDEOJS.currentTime() + time);
+						} else {
+							PICTAL.VIDEO.pause();
+							PICTAL.VIDEO.currentTime += time;
 						}
 					}
-					PICTAL.VIDEO.volume = clamp(PICTAL.VIDEO.volume + (e.key == "ArrowUp" ? .05 : -.05), 0, 1);
-					if (file.videojs) PICTAL.VIDEOJS.volume(PICTAL.VIDEO.volume);
-				}
 
-				if (e.key == "PageUp" || e.key == "PageDown") {
-					let time = (e.key == "PageUp" ? 1 : -1) * .04;
-					if (file.videojs) {
-						PICTAL.VIDEOJS.pause();
-						PICTAL.VIDEOJS.currentTime(PICTAL.VIDEOJS.currentTime() + time);
-					} else {
-						PICTAL.VIDEO.pause();
-						PICTAL.VIDEO.currentTime += time;
+					if (e.key == "m") {
+						PICTAL.VIDEO.muted = !PICTAL.VIDEO.muted;
+						if (file.videojs) PICTAL.VIDEOJS.muted(PICTAL.VIDEO.muted);
 					}
 				}
-
-				if (e.key == "m") {
-					PICTAL.VIDEO.muted = !PICTAL.VIDEO.muted;
-					if (file.videojs) PICTAL.VIDEOJS.muted(PICTAL.VIDEO.muted);
-				}
 			}
-		}
-
-		if (PICTAL.State != "preview") return;
-
-		if (e.ctrlKey && e.key == "c") {
-			navigator.clipboard.writeText(file.url);
 		}
 
 		const step_forward = (e.key == "ArrowRight" || (!e.shiftKey && e.key == " ") || e.key == "PageDown");
@@ -1132,6 +1173,12 @@ function loadPictal() {
 		if ((step_forward || step_backward) && PICTAL.Files.length > 1) {
 			PICTAL.FileIndex = clamp(PICTAL.FileIndex + ((step_forward ? 1 : -1) * ((e.shiftKey && e.key != " ") ? 5 : 1)), 0, PICTAL.Files.length - 1);
 			loadPreviewFiles();
+		}
+
+		if (PICTAL.State != "preview") return;
+
+		if (e.ctrlKey && e.key == "c") {
+			navigator.clipboard.writeText(file.url);
 		}
 
 		if (!e.shiftKey && file.video) {
@@ -1152,6 +1199,22 @@ function loadPictal() {
 			}
 		}
 
+		if (!e.ctrlKey && e.shiftKey && e.key == "End" && PICTAL.Files.length > 1 && PICTAL.Center) {
+			let search = prompt("Enter the number of the page you want to jump to or to the first page with the caption text you're looking for.", "");
+			if (search) {
+				let index = PICTAL.Files.findIndex(f => f.caption?.includes(search));
+				if (/^\d+$/.test(search)) { // is number
+					PICTAL.FileIndex = clamp(search - 1, 0, PICTAL.Files.length - 1);
+					loadPreviewFiles();
+				} else if (index > -1) {
+					PICTAL.FileIndex = index;
+					loadPreviewFiles();
+				} else if (index == -1) {
+					alert(`"${search}" not found.`);
+				}
+			}
+		}
+
 		if (!e.ctrlKey && e.shiftKey && e.key == " " && file.video) {
 			if (file.videojs) {
 				PICTAL.VIDEOJS.controls(!PICTAL.VIDEOJS.controls());
@@ -1160,7 +1223,7 @@ function loadPictal() {
 			}
 		}
 
-		if (e.ctrlKey && e.key == "s") {
+		if ((e.ctrlKey && e.key == "s") || (!e.ctrlKey && e.key == PICTAL.Shortcuts.save_image)) {
 			let filename = file.filename;
 			if (!filename) {
 				let url = new URL(file.url);
