@@ -22,7 +22,7 @@ Development is primarily focused on Firefox because that is what I use and the p
 # Differences Between Pictal and Imagus
 
 * There isn't feature parity with Imagus (yet). A lot of preferences, some shortcuts, and sieve settings are missing although if there is demand for those features then they could be added.
-* The image save system uses custom workarounds to download tricky images. There is no need for Simple Modify Headers.
+* On Chrome, the image save system uses custom workarounds to download tricky images. On Firefox, there is included a system to modify headers like Simple Modify Headers.
 * There is native VideoJS support, an extension system is unneeded.
 * The core of the sieve only uses javascript, there is no swapping between javascript mode and regex mode. I want this to be as simple as possible.
 * The grant/site filter system only uses regex, there is no swapping between modes.
@@ -132,3 +132,27 @@ If this field is left blank then the full url is passed to the preview as-is.
 
 #### Expected Return
     "https://i.4cdn.org/g/1745612666469146.#jpg png mp4 webm gif#"
+
+
+## Modify Headers
+
+This is here as a replacement for [Simple Modify Headers](https://github.com/didierfred/SimpleModifyHeaders) but only if you're on Firefox. This is mainly for downloading files and previewing files that require a certain referrer.
+
+Chrome users should stick to using that extension because recreating the functionality on Chrome is too much of a pain due to Manifest V3's restrictions.
+
+### Example
+    [{
+    	"url_wildcard": "https://*.google.com/images*",
+    	"url_contains": "google.com/images",
+    	"action": "add",
+    	"apply_on": "request",
+    	"header_name": "Referer",
+    	"header_value": "https://google.com/"
+    }, {
+    	"url_wildcard": "https://example.com/*",
+    	"url_contains": "example.com/",
+    	"action": "add",
+    	"apply_on": "request",
+    	"header_name": "Referer",
+    	"header_value": "https://example.com/"
+    }]

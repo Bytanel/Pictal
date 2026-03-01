@@ -142,11 +142,17 @@ function loadPictal() {
 		FileIndex: 0,
 		HoverURLCache: {},
 		FileURLCached: {},
+		LastFilePreviewed: null,
 		Scale: [1, 1],
 		Rotation: 0,
 		ViewMode: "default",
 		HoverTimer: null,
-		HoverTimerVars: {},
+	}
+
+	const COLORS = {
+		WHITE: "rgb(255, 255, 255)",
+		GREEN: "rgb(222, 255, 205)",
+		RED: "rgb(255, 204, 204)"
 	}
 
 	function setupVideoJS() {
@@ -182,18 +188,17 @@ function loadPictal() {
 		PICTAL.DIV = document.createElement("div");
 		document.documentElement.appendChild(PICTAL.DIV);
 		PICTAL.DIV.style.cssText = `
+			position: fixed !important;
+			display: none;
 			padding: 0px;
 			margin: 3px;
 			background: rgb(248, 248, 255) padding-box;
+			box-shadow: rgb(102, 102, 102) 0px 0px 2px;
 			border: 3px solid rgba(242, 242, 242, 0.6);
 			border-radius: 2px;
-			box-shadow: rgb(102, 102, 102) 0px 0px 2px;
-			transition: all;
 			z-index: 2147483646;
 			width: 0;
 			height: 0;
-			position: fixed !important;
-			display: none;
 			inset: 0;
 			pointer-events: none;
 		`;
@@ -206,7 +211,7 @@ function loadPictal() {
         	height: 100%;
         	cursor: zoom-in;
 		`;
-		PICTAL.IMG.onloadeddata = function (src) {
+		PICTAL.IMG.onloadeddata = function(src) {
 			if (PICTAL.State != "loading") return;
 
 			PICTAL.LOADER.style.display = "none";
@@ -218,7 +223,7 @@ function loadPictal() {
 			fileLoaded();
 			renderFrame();
 		};
-		PICTAL.IMG.addEventListener("load", function (e) {
+		PICTAL.IMG.addEventListener("load", function(e) {
 			PICTAL.IMG.onloadeddata(e.target.src);
 			if (!PICTAL.Preferences["preload_ahead"]) return;
 
@@ -232,10 +237,10 @@ function loadPictal() {
 				imagePreloader.src = file.url;
 			}
 		}, false);
-		PICTAL.IMG.addEventListener("error", function () {
+		PICTAL.IMG.addEventListener("error", function() {
 			clearInterval(PICTAL.IMGTIMER);
 
-			PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
+			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 		}, false);
 		PICTAL.DIV.appendChild(PICTAL.IMG);
 
@@ -251,11 +256,11 @@ function loadPictal() {
 			height: 100%;
 			cursor: zoom-in;
 		`;
-		PICTAL.VIDEO.onloadedmetadata = function (e) {
+		PICTAL.VIDEO.onloadedmetadata = function(e) {
 			if (PICTAL.State != "loading") return;
 
 			if (PICTAL.Files[PICTAL.FileIndex].videojs) {
-				PICTAL.VIDEOJS.el().style.display = "initial";
+				PICTAL.VIDEOJS.el().style.display = "inherit";
 				PICTAL.VIDEOJS.loop(PICTAL.VIDEOJS.duration() <= 60);
 				PICTAL.VIDEOJS.muted(PICTAL.Muted);
 				PICTAL.VIDEOJS.volume(PICTAL.Volume);
@@ -279,11 +284,14 @@ function loadPictal() {
 			PICTAL.DIV.style.display = "initial";
 			PICTAL.State = "preview";
 			//PICTAL.FileURLCached[PICTAL.Files[PICTAL.FileIndex]] = true;
-			
+
 			fileLoaded();
 			renderFrame();
 		};
-		PICTAL.VIDEO.onvolumechange = function (e) {
+		PICTAL.VIDEO.addEventListener("error", function() {
+			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
+		}, false);
+		PICTAL.VIDEO.onvolumechange = function(e) {
 			if (PICTAL.State != "preview") return;
 			if (e.target.localName == "video") {
 				PICTAL.Volume = PICTAL.VIDEO.volume;
@@ -298,13 +306,13 @@ function loadPictal() {
 		PICTAL.HEADER = document.createElement("div");
 		PICTAL.HEADER.style.cssText = `
 			position: absolute;
-			white-space: ${PICTAL.Preferences["wrap_caption"] || "nowrap"};
-			box-shadow: rgb(221, 221, 221) 0px 0px 1px inset;
 			padding: 2px;
-			border-radius: 3px;
+			box-shadow: rgb(221, 221, 221) 0px 0px 1px inset;
 			background: rgba(0, 0, 0, 0.75) !important;
-			color: rgb(255, 255, 255) !important;
+			border-radius: 3px;
+			white-space: ${PICTAL.Preferences["wrap_caption"] || "nowrap"};
 			top: -25px;
+			color: rgb(255, 255, 255) !important;
 			font: 13px/1.4em "Trebuchet MS", sans-serif;
 		`;
 		PICTAL.DIV.appendChild(PICTAL.HEADER);
@@ -312,9 +320,8 @@ function loadPictal() {
 		PICTAL.PAGINATOR = document.createElement("b");
 		PICTAL.PAGINATOR.style.cssText = `
 			display: inline-block;
-			transition: background-color 0.1s;
-			border-radius: 3px;
 			padding: 0px 2px;
+			border-radius: 3px;
 			color: rgb(0, 0, 0);
 			background-color: rgb(255, 255, 0);
 		`;
@@ -339,27 +346,27 @@ function loadPictal() {
 	PICTAL.OUTLINE.style.cssText = `
 		position: fixed;
 		box-sizing: content-box;
-		pointer-events: none;
+		outline: red dashed 1.5px;
 		z-index: 2147483645;
 		opacity: 0;
 		padding: 0;
 		margin: 0;
-		outline: red dashed 1.5px;
+		pointer-events: none;
 	`;
 	document.documentElement.appendChild(PICTAL.OUTLINE);
 
 	PICTAL.LOADER = document.createElement("img");
 	PICTAL.LOADER.style.cssText = `
+		position: fixed !important;
+		display: none;
 		padding: 5px;
 		border-radius: 50% !important;
 		box-shadow: 0px 0px 5px 1px #a6a6a6 !important;
 		background-color: rgb(255, 255, 255);
 		background-clip: padding-box;
+		z-index: 2147483647;
 		width: 38px;
 		height: 38px;
-		position: fixed !important;
-		z-index: 2147483647;
-		display: none;
 		inset: 0;
 		margin: 0;
 		pointer-events: none;
@@ -439,17 +446,16 @@ function loadPictal() {
 		}
 
 		const file = PICTAL.Files[PICTAL.FileIndex];
-		if (PICTAL.VIDEO.src == file.url || PICTAL.VIDEOJS?.currentSrc() || file.url == PICTAL.IMG.src) return;
+		if (PICTAL.LastFilePreviewed == file.url) return;
+		PICTAL.LastFilePreviewed = file.url
 
 		clearInterval(PICTAL.IMGTIMER);
 		PICTAL.DIV.style.display = "none";
 		PICTAL.CenterZoom = .75;
 		PICTAL.IMG.style.display = "none";
-		PICTAL.IMG.removeAttribute("src");
 
 		PICTAL.VIDEO.style.display = "none";
 		PICTAL.VIDEO.pause();
-		PICTAL.VIDEO.removeAttribute("src");
 
 		if (PICTAL.VIDEOJS) PICTAL.VIDEOJS.el().style.display = "none";
 		PICTAL.VIDEOJS?.dispose(); // resetting or changing src is way too slow so just delete and recreate the object
@@ -471,7 +477,7 @@ function loadPictal() {
 			if (PICTAL.FileURLCached[file.url]) {
 				PICTAL.IMG.onloadeddata(file.url);
 			} else {
-				PICTAL.IMGTIMER = setInterval(function () { // faster than waiting for the entire image to load before showing preview
+				PICTAL.IMGTIMER = setInterval(function() { // faster than waiting for the entire image to load before showing preview
 					if (PICTAL.IMG.naturalWidth) {
 						clearInterval(PICTAL.IMGTIMER);
 						PICTAL.IMG.onloadeddata(file.url);
@@ -481,26 +487,45 @@ function loadPictal() {
 		}
 	}
 
-	function setupTimer(sieve, target, targetURL) {
-		clearTimeout(PICTAL.HoverTimer);
-		PICTAL.HoverTimerVars = {
-			sieve: sieve,
-			target: target,
-			targetURL: targetURL
-		};
+	let hoverArgs = [];
 
-		const fullURL = targetURL[1] + targetURL[2];
-		if (PICTAL.HoverURLCache[fullURL]) {
-			PICTAL.Files = PICTAL.HoverURLCache[fullURL];
-			PICTAL.State = "loading";
-			loadPreviewFiles(fullURL);
-			return;
+	function setupTimer(sieve = null, target = null, targetURL = null) {
+		clearTimeout(PICTAL.HoverTimer);
+
+		if (sieve) {
+			hoverArgs = [
+				sieve,
+				target,
+				targetURL
+			];
+		} else if (hoverArgs) {
+			[sieve, target, targetURL] = hoverArgs;
+		}
+
+		if (PICTAL.Preferences["hold_to_activate"] == "enabled" && !PICTAL.isHoldingActivateKey) return;
+
+		let [sieveType, protocol, link] = targetURL;
+
+		const fullURL = protocol + link;
+
+		let delay = PICTAL.Preferences["selection_delay"];
+		if (PICTAL.Preferences["instantly_show_cached"] && PICTAL.HoverURLCache[fullURL]) {
+			delay = 0;
 		}
 
 		// on timeout, start handling the link and loading the preview media
 		PICTAL.HoverTimer = setTimeout(() => {
 			PICTAL.State = "loading";
+			hoverArgs = [];
 			createPreviewElements();
+
+			if (PICTAL.HoverURLCache[fullURL]) {
+				PICTAL.Files = PICTAL.HoverURLCache[fullURL];
+				PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
+				loadPreviewFiles(fullURL);
+				return;
+			}
+
 			updateLoader();
 
 			if (PICTAL.Preferences["add_hovered_to_history"]) {
@@ -510,28 +535,28 @@ function loadPictal() {
 				});
 			}
 
-			if (targetURL[0] == "link") {
+			if (sieveType == "link") {
 				let request_url = fullURL;
 				const link_regex = new RegExp(sieve.link_regex, "i");
 
 				if (sieve.link_request_javascript) {
 					try {
 						request_url = Function(`'use strict';` + sieve.link_request_javascript).bind({
-							protocol: targetURL[1],
-							link: targetURL[2],
+							protocol: protocol,
+							link: link,
 							regex: link_regex,
-							regex_match: targetURL[2].match(link_regex),
+							regex_match: link.match(link_regex),
 							node: target
 						})();
 						request_url = request_url;
 					} catch (error) {
 						console.error("[link_request_javascript]:", error);
-						PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
+						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 						return;
 					}
 					if (typeof request_url != "string") {
 						console.error("[link_request_javascript]:", "The returned object is not a string.");
-						PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
+						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 						return;
 					}
 				}
@@ -540,17 +565,17 @@ function loadPictal() {
 				function runParseJavascript(body, passthrough = {}) {
 					try {
 						var files = Function(`'use strict';` + sieve.link_parse_javascript).bind({
-							protocol: targetURL[1],
-							link: targetURL[2],
+							protocol: protocol,
+							link: link,
 							regex: link_regex,
-							regex_match: targetURL[2].match(link_regex),
+							regex_match: link.match(link_regex),
 							node: target,
 							body: body,
 							passthrough: passthrough,
 						})();
 					} catch (error) {
 						console.error("[link_parse_javascript]", error);
-						PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
+						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 						return [];
 					}
 					return files;
@@ -563,7 +588,7 @@ function loadPictal() {
 
 						if (!body) {
 							console.error(`${url} returned without a body.`);
-							PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
+							PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 							return;
 						}
 
@@ -576,7 +601,7 @@ function loadPictal() {
 
 						if (!files?.length || typeof files != "object") {
 							console.error("[link_parse_javascript]:", "The returned object is not an array.");
-							PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
+							PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 							return;
 						}
 
@@ -589,11 +614,11 @@ function loadPictal() {
 
 					if (!PICTAL.Files?.length) {
 						console.error("Empty files");
-						PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
+						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 						return;
 					}
 
-					PICTAL.LOADER.style.backgroundColor = "rgb(222, 255, 205)";
+					PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
 					loadPreviewFiles(fullURL);
 				}
 
@@ -609,21 +634,21 @@ function loadPictal() {
 			}
 
 
-			if (targetURL[0] == "image") {
+			if (sieveType == "image") {
 				let links = [fullURL];
 				const image_regex = new RegExp(sieve.image_regex, "i");
 				if (sieve.image_parse_javascript) {
 					try {
 						var request_url = Function(`'use strict';` + sieve.image_parse_javascript).bind({
-							protocol: targetURL[1],
-							link: targetURL[2],
+							protocol: protocol,
+							link: link,
 							regex: image_regex,
-							regex_match: targetURL[2].match(image_regex),
+							regex_match: link.match(image_regex),
 							node: target
 						})();
 					} catch (error) {
 						console.error("[image_parse_javascript]:", error);
-						PICTAL.LOADER.style.backgroundColor = "rgb(255, 204, 204)";
+						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 						return;
 					}
 
@@ -639,7 +664,7 @@ function loadPictal() {
 						url: links[0],
 						video: /^(mp[34]|webm)$/gi.test(ext)
 					}];
-					PICTAL.LOADER.style.backgroundColor = "rgb(222, 255, 205)";
+					PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
 					loadPreviewFiles(fullURL);
 					return;
 				}
@@ -688,13 +713,13 @@ function loadPictal() {
 							}
 							PICTAL.Files[0].filename = filename;
 
-							PICTAL.LOADER.style.backgroundColor = "rgb(222, 255, 205)";
+							PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
 							loadPreviewFiles(fullURL);
 						}
 					});
 				}
 			}
-		}, PICTAL.Preferences["selection_delay"]);
+		}, delay);
 	}
 
 	function checkSieveURLs(urls, type, regex, filter_javascript, target) {
@@ -730,13 +755,13 @@ function loadPictal() {
 		}
 
 		if (PICTAL.State == "selecting") {
-			setupTimer(PICTAL.HoverTimerVars.sieve, PICTAL.HoverTimerVars.target, PICTAL.HoverTimerVars.targetURL);
+			setupTimer();
 		}
 	});
 
 	// select elements to parse and preview
 	document.addEventListener("mouseover", (e) => {
-		if (PICTAL.Preferences && ((PICTAL.Preferences["hold_to_activate"] == "disabled" && PICTAL.isHoldingActivateKey) || (PICTAL.Preferences["hold_to_activate"] == "enabled" && !PICTAL.isHoldingActivateKey))) return;
+		if (PICTAL.Preferences && PICTAL.Preferences["hold_to_activate"] == "disabled" && PICTAL.isHoldingActivateKey) return;
 		if (PICTAL.TargetedElement || PICTAL.State != "idle") return;
 
 		const target = e.target;
@@ -758,6 +783,8 @@ function loadPictal() {
 
 		let parent = target;
 		const targetRects = target.getClientRects()[0];
+		if (!targetRects) return;
+
 		for (let i = 0; i < 5; i++) {
 			if (parent == document.body) break;
 
@@ -993,13 +1020,14 @@ function loadPictal() {
 
 		PICTAL.OUTLINE.style.opacity = "0";
 		PICTAL.LOADER.style.display = "none";
-		PICTAL.LOADER.style.backgroundColor = "rgb(255, 255, 255)";
+		PICTAL.LOADER.style.backgroundColor = COLORS.WHITE;
 		PICTAL.CenterZoom = .75;
 		PICTAL.Center = false;
 		PICTAL.TargetedElement = null;
 		PICTAL.State = "idle";
 		PICTAL.Files = [];
 		PICTAL.FileIndex = 0;
+		PICTAL.LastFilePreviewed = null;
 		PICTAL.Scale = [1, 1];
 		PICTAL.Rotation = 0;
 		PICTAL.ViewMode = "default";
@@ -1038,10 +1066,13 @@ function loadPictal() {
 	});
 
 	window.addEventListener("keydown", (e) => {
-		if (e.target.isContentEditable || e.target.localName == "input") return;
+		if (e.target.isContentEditable || e.target.localName == "input") return; // if typing in an input, don't use shortcuts
 
-		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"]) {
+		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"] && !e.repeat) {
 			PICTAL.isHoldingActivateKey = true;
+			if (PICTAL.Preferences["hold_to_activate"] == "enabled" && PICTAL.State == "selecting" && !PICTAL.HoverTimer) {
+				setupTimer();
+			}
 		}
 
 		if (PICTAL.State == "idle") return;
@@ -1238,13 +1269,8 @@ function loadPictal() {
 			}, (resp) => {
 				if (resp.ok == false) {
 					// have to window.open, chrome.tabs.create doesn't work for all cases
-					if (platform == "chrome") {
-						// chrome.downloads.download returns immediately in chrome so we can't use a separate window because the download window is also closed upon window.close
-						window.open(file.url + "#PICTALFILENAME=" + filename, "_blank");
-					} else {
-						// window.open forces focus on new tab/window and a new window is less annoying than a new tab
-						window.open(file.url + "#PICTALFILENAME=" + filename, "_blank", "width=500,height=1,resizable=yes");
-					}
+					// chrome.downloads.download returns immediately in chrome so we can't use a separate window because the download window is also closed upon window.close
+					window.open(file.url + "#PICTALFILENAME=" + filename, "_blank");
 				}
 			});
 		}

@@ -9,6 +9,7 @@ const DefaultPreferences = {
 	video_volume: 50,
 	show_resolution: false,
 	preload_ahead: true,
+	instantly_show_cached: true,
 	add_hovered_to_history: false,
 	cyclical_albums: false,
 	show_caption: true,
@@ -32,7 +33,7 @@ const DefaultShortcuts = {
 	auto_fit: "2",
 	fit_to_width: "3",
 	fit_to_height: "4",
-}
+};
 
 function prepareConfig(defaultTbl, tbl) {
 	for (const i in defaultTbl) {
@@ -43,25 +44,30 @@ function prepareConfig(defaultTbl, tbl) {
 	return tbl;
 }
 
+async function getSieves() {
+	return chrome.storage.local.get("sieves").then(result => {
+		if (!result.sieves) {
+			return fetch(chrome.runtime.getURL("data/sieves.json")).then(r => r.json())
+				.then(json => {
+					chrome.storage.local.set({
+						sieves: json
+					});
+					return json;
+				});
+		} else {
+			return result.sieves;
+		}
+	});
+}
+
+var HeaderRules = new Set();
 
 function onMessage(message, sender, sendResponse) {
 	if (message.type == "GetSieves") {
-		chrome.storage.local.get("sieves").then(result => {
-			if (!result.sieves) {
-				fetch(chrome.runtime.getURL("data/sieves.json")).then(r => r.json())
-					.then(json => {
-						chrome.storage.local.set({
-							sieves: json
-						});
-						sendResponse({
-							sieves: json
-						});
-					});
-			} else {
-				sendResponse({
-					sieves: result.sieves
-				});
-			}
+		getSieves().then(sieve => {
+			sendResponse({
+				sieves: sieve
+			});
 		});
 		return true;
 	}
@@ -186,6 +192,12 @@ function onMessage(message, sender, sendResponse) {
 		registerContentScripts();
 		return;
 	}
+	if (message.type == "ReloadListeners") {
+		getSieves().then(sieve => {
+			addModifyHeaderListeners(sieve);
+		});
+		return;
+	}
 }
 
 async function registerContentScripts() {
@@ -222,7 +234,51 @@ chrome.runtime.onUserScriptMessage?.addListener(onMessage);
 chrome.runtime.onInstalled.addListener(function(e) {
 	if (e.reason === "update") {
 		registerContentScripts();
+		getSieves().then(sieve => {
+			addModifyHeaderListeners(sieve);
+		});
 	} else if (e.reason === "install") {
 		chrome.runtime.openOptionsPage();
 	}
 });
+
+
+function rewriteUserAgentHeaderAsync(e) {
+	for (const sieve of HeaderRules) {
+		if (!e.url.includes(sieve.url_contains)) continue;
+		if (sieve.action == "add" && sieve.apply_on == "request") {
+			e.requestHeaders.push({
+				name: sieve.header_name,
+				value: sieve.header_value
+			});
+		}
+	}
+
+	return {
+		requestHeaders: e.requestHeaders
+	};
+}
+
+function addModifyHeaderListeners(sieves) {
+	if (platform != "firefox") return;
+	HeaderRules = new Set();
+	let requestHeadersURLs = [];
+
+	for (const sieve in sieves) {
+		if (sieves[sieve].modify_headers_json) {
+			JSON.parse(sieves[sieve].modify_headers_json).forEach(rule => {
+				HeaderRules.add(rule);
+				if (rule.apply_on == "request" && rule.url_wildcard) requestHeadersURLs.push(rule.url_wildcard);
+			})
+		}
+	};
+
+
+	chrome.webRequest.onBeforeSendHeaders.removeListener(rewriteUserAgentHeaderAsync);
+	chrome.webRequest.onBeforeSendHeaders.addListener(
+		rewriteUserAgentHeaderAsync, {
+			urls: requestHeadersURLs
+		},
+		["blocking", "requestHeaders"],
+	);
+}

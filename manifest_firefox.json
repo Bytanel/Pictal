@@ -23,7 +23,9 @@
     "cookies",
     "downloads",
     "history",
-    "storage"
+    "storage",
+    "webRequest",
+    "webRequestBlocking"
   ],
   "optional_permissions": [
     "userScripts"

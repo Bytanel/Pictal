@@ -1,14 +1,18 @@
 @charset "UTF-8";
 
-#link_filter_javascript, #image_filter_javascript{
+#link_filter_javascript, #image_filter_javascript {
     height: 50px;
 }
 
-#link_request_javascript{
+#link_request_javascript {
     height: 75px;
 }
 #link_parse_javascript, #image_parse_javascript {
     height: 200px;
+}
+
+#modify_headers_json {
+    height: 75px;
 }
 
 
@@ -135,7 +139,7 @@ a:hover {
     color: #999;
 }
 hr {
-    border: 1px solid #eee;
+    border: 1px solid #bbb;
     margin: 10px 0;
 }
 #sieve_sec hr {
