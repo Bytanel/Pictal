@@ -66,7 +66,7 @@ function addSieve(sieve_name, sieve) {
             </div>
             <hr>
             <div class="rule_line">
-                <label style="width: 105px">Modify Headers (Firefox Only):</label>
+                <label style="width: 60px">Modify Headers:</label>
                 <pre id="modify_headers_json"></pre>
             </div>
             <hr>
@@ -258,6 +258,7 @@ function getSieves(search = "", sieve = null) {
 }
 
 function save() {
+	if (!SAVED_SIEVES) return;
 	document.querySelector("#save_button").classList.remove("alert");
 
 	SAVED_SIEVES = getSieves();
@@ -362,7 +363,9 @@ function setupShortcuts(shortcuts) {
 function sievesFromJSON(json) {
 	document.querySelector("#sieve_container").innerHTML = '';
 	for (const sieve in json) {
+        let enabled = SAVED_SIEVES[sieve]?.enabled;
 		SAVED_SIEVES[sieve] = json[sieve];
+        if (enabled) SAVED_SIEVES[sieve].enabled = enabled;
 	}
 	for (const sieve in SAVED_SIEVES) {
 		addSieve(sieve, SAVED_SIEVES[sieve]);
@@ -481,13 +484,15 @@ window.addEventListener("load", function() {
 	}
 	document.querySelector("#save_button").onclick = save;
 	document.querySelector("#new_button").onclick = new_sieve;
-	document.querySelector("#allow_scripts_message").onclick = function(e) {
-		e.preventDefault();
-		chrome.permissions.request({
-			permissions: ["userScripts"]
-		});
-	}
-	setTimeout(checkUserScripts, 500);
+    if (chrome.runtime.getManifest().manifest_version == 3) {
+	    document.querySelector("#allow_scripts_message").onclick = function(e) {
+	    	e.preventDefault();
+	    	chrome.permissions.request({
+	    		permissions: ["userScripts"]
+	    	});
+	    }
+	    setTimeout(checkUserScripts, 500);
+    }
 
 	// swap between the different pages
 	document.querySelector("#nav_menu").onclick = function(e) {

@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Pictal",
-  "version": "2026.2.23",
+  "version": "2026.3.3",
   "description": "Enlarge and preview images and videos from links.",
+  "homepage_url": "https://github.com/Bytanel/Pictal",
   "web_accessible_resources": [
     {
       "resources": ["data/sieves.json"],
@@ -14,7 +15,9 @@
     "downloads",
     "history",
     "storage",
-    "userScripts"
+    "userScripts",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "<all_urls>"

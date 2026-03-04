@@ -30,51 +30,113 @@ chrome.runtime.sendMessage({
 	if (window.location.hash.includes("PICTALFILENAME=")) {
 		downloadFile();
 	} else if (window == window.top && !blacklisted && document.contentType == "text/html") { // don't run in iframes and only run on web pages, not direct media files
-		// has to be done here otherwise throws errors for some reason
-		chrome.runtime.sendMessage({
-			type: "GetVideoJSJavacript"
-		}, (response) => {
-			eval(response.js);
-		});
+		if (platform == "chrome") {
+			// has to be done here otherwise throws errors for some reason
+			chrome.runtime.sendMessage({
+				type: "GetVideoJSJavacript"
+			}, (response) => {
+				eval(response.js);
+			});
+		}
 
 		loadPictal();
 	}
 });
 
-async function makeRequest(url, method, blob = false) {
-	try {
-		// try from page context with cookies
-		var response = await fetch(url, {
-			method: method,
-			cache: "default"
+if (platform == "firefox") {
+	// required for Firefox Manifest V2
+	function injectFetch(url) {
+		return new Promise((resolve, reject) => {
+			const requestID = "PICTAL_" + Math.random().toString(36).slice(2);
+
+			function handleMessage(event) {
+				if (event.source !== window) return;
+				if (!event.data || event.data.requestID !== requestID || !event.data.type.startsWith("PICTAL_FETCH_")) return;
+
+				window.removeEventListener("message", handleMessage);
+
+				if (event.data.type === "PICTAL_FETCH_RESULT") {
+					resolve({
+						status: event.data.status,
+						body: event.data.body,
+						headers: event.data.headers
+					});
+				} else {
+					reject();
+				}
+			}
+
+			window.addEventListener("message", handleMessage);
+
+			window.postMessage({
+				type: "PICTAL_FETCH",
+				requestID,
+				url
+			}, "*");
 		});
-		if (blob) {
-			var body = await response.blob();
-		} else {
-			var body = await response.text();
-		}
-		var headers = {};
-		response.headers.forEach((value, key) => {
-			headers[key] = value;
-		});
-	} catch (error) {
-		// try from service worker
-		var response = await chrome.runtime.sendMessage({
-			type: "MakeRequest",
-			url: url,
-			method: method
-		});
-		var body = response.body;
-		var headers = response.headers;
 	}
-	return {
-		status: response.status,
-		headers: headers,
-		body: body
-	};
+	
+	var makeRequest = async function(url, method, blob = false) {
+		return await injectFetch(url).then(({
+			status,
+			body,
+			headers
+		}) => {
+			return {
+				status: status,
+				headers: headers,
+				body: body
+			};
+		}).catch(async () => {
+			let response = await chrome.runtime.sendMessage({
+				type: "MakeRequest",
+				url: url,
+				method: method
+			});
+			return {
+				status: response.status,
+				headers: response.header,
+				body: response.body
+			};
+		});
+	}
+} else {
+	var makeRequest = async function(url, method, blob = false) {
+		try {
+			// try from page context with cookies
+			var response = await fetch(url, {
+				method: method,
+				cache: "default"
+			});
+			if (blob) {
+				var body = await response.blob();
+			} else {
+				var body = await response.text();
+			}
+			var headers = {};
+			response.headers.forEach((value, key) => {
+				headers[key] = value;
+			});
+		} catch (error) {
+			// try from service worker
+			var response = await chrome.runtime.sendMessage({
+				type: "MakeRequest",
+				url: url,
+				method: method
+			});
+			var body = response.body;
+			var headers = response.headers;
+		}
+		return {
+			status: response.status,
+			headers: headers,
+			body: body
+		};
+	}
 }
 
-// backup file downloader that bypasses CORS and referrer requirements
+
+// backup file downloader that bypasses CORS and referer requirements
 function downloadFile() {
 	try {
 		document.title = "[Pictal] Downloading... DO NOT CLOSE";
@@ -105,13 +167,15 @@ function downloadFile() {
 }
 
 function loadPictal() {
-	chrome.runtime.sendMessage({
-		type: "GetVideoJSCSS"
-	}, (response) => {
-		const style = document.createElement("style");
-		style.textContent = response.css;
-		document.documentElement.appendChild(style);
-	});
+	if (platform == "chrome") {
+		chrome.runtime.sendMessage({
+			type: "GetVideoJSCSS"
+		}, (response) => {
+			const style = document.createElement("style");
+			style.textContent = response.css;
+			document.documentElement.appendChild(style);
+		});
+	}
 	chrome.runtime.sendMessage({
 		type: "GetSieves"
 	}, (response) => {
@@ -129,6 +193,79 @@ function loadPictal() {
 		PICTAL.Shortcuts = response.shortcuts;
 	});
 
+	if (platform == "firefox") {
+		// bypass Content-Security-Policy protections by loading the code through a local extension url
+		const script = document.createElement("script");
+		script.src = browser.runtime.getURL("content/injectFetch.js");
+		script.id = "PICTAL-INJECTED";
+		(document.head || document.documentElement).appendChild(script);
+	}
+
+	// object meant to organize the files and metadata used for the preview
+	class URLCache {
+		parsedLinkCache = {}; // table of gallery objects from links already parsed by sieves
+		loadedFileList = {}; // list of images that have been fully loaded and are therefore cached by the browser
+		currentURL = null;
+
+		set(url) {
+			this.currentURL = url;
+		}
+
+		add(url, files) {
+			this.parsedLinkCache[url] = {
+				files: files,
+				index: 0
+			};
+		}
+
+		getFile() {
+			return this.parsedLinkCache[this.currentURL]?.files[this.parsedLinkCache[this.currentURL].index];
+		}
+
+		getFiles() {
+			return this.parsedLinkCache[this.currentURL]?.files || [];
+		}
+
+		contains(url) {
+			return this.parsedLinkCache[url] != null;
+		}
+
+
+		setAsCached(fileURL) {
+			this.loadedFileList[fileURL] = true;
+		}
+
+		isCached(fileURL) {
+			return this.loadedFileList[fileURL];
+		}
+
+
+		incrementIndex() {
+			let ind = this.parsedLinkCache[this.currentURL].index + 1;
+			if (PICTAL.Preferences["cyclical_albums"] && ind == this.parsedLinkCache[this.currentURL].files.length) {
+				ind = 0;
+			}
+			this.parsedLinkCache[this.currentURL].index = Math.min(ind, this.parsedLinkCache[this.currentURL].files.length - 1);
+		}
+
+		decrementIndex() {
+			let ind = this.parsedLinkCache[this.currentURL].index - 1;
+			if (PICTAL.Preferences["cyclical_albums"] && ind == -1) {
+				ind = this.parsedLinkCache[this.currentURL].files.length - 1;
+			}
+			this.parsedLinkCache[this.currentURL].index = Math.max(ind, 0);
+		}
+
+		setIndex(ind) {
+			this.parsedLinkCache[this.currentURL].index = ind;
+		}
+
+		getIndex() {
+			return this.parsedLinkCache[this.currentURL].index;
+		}
+	}
+	const HoveredLinks = new URLCache();
+
 	const PICTAL = {
 		State: "idle",
 		isHoldingActivateKey: false,
@@ -138,10 +275,6 @@ function loadPictal() {
 		MouseY: 0,
 		Muted: false,
 		Volume: 0,
-		Files: [],
-		FileIndex: 0,
-		HoverURLCache: {},
-		FileURLCached: {},
 		LastFilePreviewed: null,
 		Scale: [1, 1],
 		Rotation: 0,
@@ -163,7 +296,13 @@ function loadPictal() {
 		vid.style.display = "block";
 		PICTAL.DIV.appendChild(vid);
 
-		PICTAL.VIDEOJS = videojs(vid);
+		PICTAL.VIDEOJS = videojs(vid, {
+			html5: {
+				vhs: {
+					limitRenditionByPlayerDimensions: false // videojs will set quality based on player size by default so disable it
+				}
+			}
+		});
 		PICTAL.VIDEOJS.muted(PICTAL.Muted);
 		PICTAL.VIDEOJSQUALITY = PICTAL.VIDEOJS.maxQualitySelector({
 			autoLabel: "Auto",
@@ -176,6 +315,9 @@ function loadPictal() {
 		});
 		PICTAL.VIDEOJS.on("loadedmetadata", PICTAL.VIDEO.onloadedmetadata);
 		PICTAL.VIDEOJS.on("volumechange", PICTAL.VIDEO.onvolumechange);
+		PICTAL.VIDEOJS.on("error", () => {
+			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
+		});
 	}
 
 	function clamp(number, min, max) {
@@ -218,7 +360,7 @@ function loadPictal() {
 			PICTAL.DIV.style.display = "initial";
 			PICTAL.IMG.style.display = "initial";
 			PICTAL.State = "preview";
-			PICTAL.FileURLCached[src] = true;
+			HoveredLinks.setAsCached(src);
 
 			fileLoaded();
 			renderFrame();
@@ -227,14 +369,17 @@ function loadPictal() {
 			PICTAL.IMG.onloadeddata(e.target.src);
 			if (!PICTAL.Preferences["preload_ahead"]) return;
 
-			for (let i = PICTAL.FileIndex; i <= PICTAL.FileIndex + 2; i++) {
-				const file = PICTAL.Files[i];
+			for (let i = HoveredLinks.getIndex(); i <= HoveredLinks.getIndex() + 2; i++) {
+				const file = HoveredLinks.getFiles()[i];
 				if (!file) break;
 
 				if (file.video) continue;
 
-				let imagePreloader = new Image();
+				const imagePreloader = new Image();
 				imagePreloader.src = file.url;
+				imagePreloader.onload = function() {
+					HoveredLinks.setAsCached(file.url);
+				}
 			}
 		}, false);
 		PICTAL.IMG.addEventListener("error", function() {
@@ -259,7 +404,7 @@ function loadPictal() {
 		PICTAL.VIDEO.onloadedmetadata = function(e) {
 			if (PICTAL.State != "loading") return;
 
-			if (PICTAL.Files[PICTAL.FileIndex].videojs) {
+			if (HoveredLinks.getFile().videojs) {
 				PICTAL.VIDEOJS.el().style.display = "inherit";
 				PICTAL.VIDEOJS.loop(PICTAL.VIDEOJS.duration() <= 60);
 				PICTAL.VIDEOJS.muted(PICTAL.Muted);
@@ -283,12 +428,12 @@ function loadPictal() {
 			PICTAL.LOADER.style.display = "none";
 			PICTAL.DIV.style.display = "initial";
 			PICTAL.State = "preview";
-			//PICTAL.FileURLCached[PICTAL.Files[PICTAL.FileIndex]] = true;
 
 			fileLoaded();
 			renderFrame();
 		};
 		PICTAL.VIDEO.addEventListener("error", function() {
+
 			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 		}, false);
 		PICTAL.VIDEO.onvolumechange = function(e) {
@@ -377,23 +522,36 @@ function loadPictal() {
 	function updateLoader() {
 		if (PICTAL.State != "loading") return;
 
+		const minHeight = 15;
+		const maxHeight = window.innerHeight - 15 - minHeight;
+		const maxWidth = window.innerWidth - 25;
+
 		PICTAL.LOADER.style.display = "initial";
 		if (PICTAL.Center) {
-			const minHeight = 15;
-			const maxHeight = window.innerHeight - 15 - minHeight;
-			const maxWidth = window.innerWidth - 25;
-
 			PICTAL.LOADER.style.top = `${(maxHeight / 2)}px`;
 			PICTAL.LOADER.style.left = `${(maxWidth / 2)}px`;
 		} else {
-			PICTAL.LOADER.style.left = `${PICTAL.MouseX}px`;
-			PICTAL.LOADER.style.top = `${PICTAL.MouseY - 50}px`;
+			const offset = Number(PICTAL.Preferences["loader_offset"]);
+			const loaderOffset = 48 / 2;
+			const x = PICTAL.MouseX - loaderOffset;
+			const y = PICTAL.MouseY - loaderOffset;
+
+			if (PICTAL.MouseX < maxWidth / 2) {
+				PICTAL.LOADER.style.left = `${x + offset}px`;
+			} else {
+				PICTAL.LOADER.style.left = `${x - offset}px`;
+			}
+			if (PICTAL.MouseY < maxHeight / 2) {
+				PICTAL.LOADER.style.top = `${y + offset}px`;
+			} else {
+				PICTAL.LOADER.style.top = `${y - offset}px`;
+			}
 		}
 	}
 
 	function getResolution() {
 		let elHeight, elWidth;
-		const file = PICTAL.Files[PICTAL.FileIndex];
+		const file = HoveredLinks.getFile();
 
 		if (file.video) {
 			if (file.videojs) {
@@ -414,40 +572,38 @@ function loadPictal() {
 	}
 
 	function fileLoaded() {
-		const file = PICTAL.Files[PICTAL.FileIndex];
+		const file = HoveredLinks.getFile();
+		const gallerySize = HoveredLinks.getFiles().length;
 		const [elHeight, elWidth] = getResolution();
 
-		PICTAL.HEADER.style.display = (PICTAL.Files.length > 1 || file.caption || PICTAL.Preferences["show_resolution"]) ? "block" : "none";
-		if (PICTAL.Files.length > 1) {
+		PICTAL.HEADER.style.display = (gallerySize > 1 || file.caption || PICTAL.Preferences["show_resolution"]) ? "block" : "none";
+		if (gallerySize > 1) {
 			PICTAL.PAGINATOR.style.display = "initial";
-			PICTAL.PAGINATOR.innerText = `${PICTAL.FileIndex+1} / ${PICTAL.Files.length}`;
+			PICTAL.PAGINATOR.innerText = `${HoveredLinks.getIndex()+1} / ${gallerySize}`;
 		} else {
 			PICTAL.PAGINATOR.style.display = "none";
 		}
 		if (PICTAL.Preferences["show_resolution"]) {
 			PICTAL.RESOLUTION.style.display = "initial";
 			PICTAL.RESOLUTION.innerText = `${elWidth}x${elHeight}`;
-			PICTAL.RESOLUTION.style.marginLeft = (PICTAL.Files.length > 1 ? "4px" : "0px");
+			PICTAL.RESOLUTION.style.marginLeft = (gallerySize > 1 ? "4px" : "0px");
 		} else {
 			PICTAL.RESOLUTION.style.display = "none";
 		}
 		if (file.caption && PICTAL.Preferences["show_caption"]) {
 			PICTAL.CAPTION.style.display = "initial";
 			PICTAL.CAPTION.innerText = file.caption.replace(/[\n\r]+/g, " ");
-			PICTAL.CAPTION.style.marginLeft = ((PICTAL.Files.length > 1 || PICTAL.Preferences["show_resolution"]) ? "4px" : "0px");
+			PICTAL.CAPTION.style.marginLeft = ((gallerySize > 1 || PICTAL.Preferences["show_resolution"]) ? "4px" : "0px");
 		} else {
 			PICTAL.CAPTION.style.display = "none";
 		}
 	}
 
-	function loadPreviewFiles(fullURL = null) {
-		if (fullURL) {
-			PICTAL.HoverURLCache[fullURL] = PICTAL.Files;
-		}
+	function loadPreviewFiles() {
 
-		const file = PICTAL.Files[PICTAL.FileIndex];
+		const file = HoveredLinks.getFile();
 		if (PICTAL.LastFilePreviewed == file.url) return;
-		PICTAL.LastFilePreviewed = file.url
+		PICTAL.LastFilePreviewed = file.url;
 
 		clearInterval(PICTAL.IMGTIMER);
 		PICTAL.DIV.style.display = "none";
@@ -473,19 +629,41 @@ function loadPictal() {
 				PICTAL.VIDEO.src = file.url;
 			}
 		} else {
-			PICTAL.IMG.src = file.url;
-			if (PICTAL.FileURLCached[file.url]) {
+			if (HoveredLinks.isCached(file.url)) {
+				PICTAL.IMG.src = file.url;
 				PICTAL.IMG.onloadeddata(file.url);
 			} else {
-				PICTAL.IMGTIMER = setInterval(function() { // faster than waiting for the entire image to load before showing preview
-					if (PICTAL.IMG.naturalWidth) {
+				PICTAL.IMG.removeAttribute("src");
+
+				// if you change the src on a loading image then the download gets canceled so use this loader to keep the connection open and finish the download
+				const loader = new Image();
+				loader.src = file.url;
+				PICTAL.IMGTIMER = setInterval(function() { // start displaying the image as it is downloading
+					if (loader.naturalWidth) {
 						clearInterval(PICTAL.IMGTIMER);
+						PICTAL.IMG.src = loader.src;
 						PICTAL.IMG.onloadeddata(file.url);
 					}
-				}, 100);
+				}, 25);
 			}
 		}
 	}
+
+
+	function handleFiles(fullURL, files) {
+		if (!files?.length) {
+			console.error("Empty files");
+			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
+			return;
+		}
+
+		PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
+
+		HoveredLinks.add(fullURL, files);
+		HoveredLinks.set(fullURL);
+		loadPreviewFiles();
+	}
+
 
 	let hoverArgs = [];
 
@@ -509,7 +687,7 @@ function loadPictal() {
 		const fullURL = protocol + link;
 
 		let delay = PICTAL.Preferences["selection_delay"];
-		if (PICTAL.Preferences["instantly_show_cached"] && PICTAL.HoverURLCache[fullURL]) {
+		if (PICTAL.Preferences["instantly_show_cached"] && HoveredLinks.contains(fullURL)) {
 			delay = 0;
 		}
 
@@ -519,10 +697,11 @@ function loadPictal() {
 			hoverArgs = [];
 			createPreviewElements();
 
-			if (PICTAL.HoverURLCache[fullURL]) {
-				PICTAL.Files = PICTAL.HoverURLCache[fullURL];
+			if (HoveredLinks.contains(fullURL)) {
 				PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
-				loadPreviewFiles(fullURL);
+				HoveredLinks.set(fullURL);
+				if (!PICTAL.Preferences["keep_cached_gallery_index"]) HoveredLinks.setIndex(0);
+				loadPreviewFiles();
 				return;
 			}
 
@@ -609,27 +788,16 @@ function loadPictal() {
 					}).then(r => r);
 				}
 
-				function handleFiles(files) {
-					PICTAL.Files = files;
-
-					if (!PICTAL.Files?.length) {
-						console.error("Empty files");
-						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-						return;
-					}
-
-					PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
-					loadPreviewFiles(fullURL);
-				}
-
 				if (!sieve.link_parse_javascript) {
-					handleFiles([{
+					handleFiles(fullURL, [{
 						url: request_url
 					}]);
 				} else if (!sieve.link_request_javascript) {
-					handleFiles(runParseJavascript(""));
+					handleFiles(fullURL, runParseJavascript(""));
 				} else {
-					recursiveRequest(request_url).then(handleFiles);
+					recursiveRequest(request_url).then(files => {
+						handleFiles(fullURL, files);
+					});
 				}
 			}
 
@@ -660,12 +828,12 @@ function loadPictal() {
 				// if it's a single possible link and we know the filetype then just use it
 				const ext = new URL(links[0])?.pathname?.split(".").pop();
 				if (links.length == 1 && ext && /^(png|jpe?g|gif|avif|mp[34]|web[mp])$/gi.test(ext)) {
-					PICTAL.Files = [{
+					let files = [{
 						url: links[0],
 						video: /^(mp[34]|webm)$/gi.test(ext)
 					}];
 					PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
-					loadPreviewFiles(fullURL);
+					handleFiles(fullURL, files);
 					return;
 				}
 
@@ -673,11 +841,11 @@ function loadPictal() {
 				for (const l in links) {
 					makeRequest(links[l], "HEAD").then(resp => {
 						if (resp.status == 200 || resp.status == 206) {
-							PICTAL.Files = [{
+							let files = [{
 								url: links[l]
 							}];
 							if (resp.headers["content-type"].split("/")[0] == "video") {
-								PICTAL.Files = [{
+								files = [{
 									url: links[l],
 									video: true
 								}];
@@ -711,10 +879,10 @@ function loadPictal() {
 										break;
 								}
 							}
-							PICTAL.Files[0].filename = filename;
+							files[0].filename = filename;
 
 							PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
-							loadPreviewFiles(fullURL);
+							handleFiles(fullURL, files);
 						}
 					});
 				}
@@ -768,6 +936,7 @@ function loadPictal() {
 		if (target == document.documentElement || target == document.body || target == document.header) return;
 		if (target.children.length > 5) return;
 
+
 		let elements = new Set();
 
 		// find closest elements in ancestors
@@ -820,6 +989,7 @@ function loadPictal() {
 			if (el.hasAttribute("data-source")) urls.add(el.getAttribute("data-source"));
 		});
 		if (urls.size == 1 && urls.has(null)) return;
+
 
 		// look for link regex and image regex matches and use the first match
 		let targetSieve = null;
@@ -907,7 +1077,9 @@ function loadPictal() {
 			}
 		}
 		const maxHeight = document.documentElement.clientHeight - heightBoundsTop - heightBoundsBottom;
-		const maxWidth = document.documentElement.clientWidth;
+
+		const widthBoundsRight = 15;
+		const maxWidth = document.documentElement.clientWidth - widthBoundsRight;
 
 
 		let scale = Math.min(maxWidth / elWidth, maxHeight / elHeight);
@@ -991,7 +1163,7 @@ function loadPictal() {
 				PICTAL.HEADER.style.top = "-25px";
 			}
 
-			const side_spacing = (PICTAL.CenterZoom > 1 ? 40 : 0);
+			const side_spacing = ((height > maxHeight || width > maxWidth) ? 40 : 0);
 			height += side_spacing;
 			width += side_spacing * 2;
 
@@ -1025,8 +1197,6 @@ function loadPictal() {
 		PICTAL.Center = false;
 		PICTAL.TargetedElement = null;
 		PICTAL.State = "idle";
-		PICTAL.Files = [];
-		PICTAL.FileIndex = 0;
 		PICTAL.LastFilePreviewed = null;
 		PICTAL.Scale = [1, 1];
 		PICTAL.Rotation = 0;
@@ -1043,11 +1213,13 @@ function loadPictal() {
 		PICTAL.VIDEO.pause();
 		PICTAL.VIDEO.removeAttribute("src");
 		PICTAL.VIDEO.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
-		PICTAL.VIDEOJS?.reset();
+		PICTAL.VIDEOJS?.dispose();
+		PICTAL.VIDEOJS = null;
 	}
 
+	let pauseMouseOut = false;
 	document.addEventListener("mouseout", (e) => {
-		if (PICTAL.State != "idle" && !PICTAL.Center && !PICTAL.TargetedElement.contains(e.relatedTarget)) {
+		if (PICTAL.State != "idle" && !PICTAL.Center && !PICTAL.TargetedElement?.contains(e.relatedTarget) && !pauseMouseOut) {
 			reset();
 		}
 	});
@@ -1059,6 +1231,7 @@ function loadPictal() {
 	window.addEventListener("keyup", (e) => {
 		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"]) {
 			PICTAL.isHoldingActivateKey = false;
+			e.preventDefault();
 		}
 	}, {
 		capture: true,
@@ -1068,8 +1241,9 @@ function loadPictal() {
 	window.addEventListener("keydown", (e) => {
 		if (e.target.isContentEditable || e.target.localName == "input") return; // if typing in an input, don't use shortcuts
 
-		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"] && !e.repeat) {
+		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"] && !PICTAL.isHoldingActivateKey) {
 			PICTAL.isHoldingActivateKey = true;
+			e.preventDefault();
 			if (PICTAL.Preferences["hold_to_activate"] == "enabled" && PICTAL.State == "selecting" && !PICTAL.HoverTimer) {
 				setupTimer();
 			}
@@ -1080,10 +1254,11 @@ function loadPictal() {
 		e.stopPropagation();
 		e.stopImmediatePropagation();
 
-		const file = PICTAL.Files[PICTAL.FileIndex];
+		const file = HoveredLinks.getFile();
+		const gallerySize = HoveredLinks.getFiles().length;
 
 		if (!e.ctrlKey && !e.shiftKey) {
-			if (e.key == "Escape" || e.key == PICTAL.Preferences["hold_to_activate_trigger"]) reset();
+			if (e.key == "Escape" || e.key == PICTAL.Shortcuts.close_preview) reset();
 
 			if ((e.key == PICTAL.Shortcuts.zoom_in || e.key == PICTAL.Shortcuts.natural_size || e.key == PICTAL.Shortcuts.auto_fit || e.key == PICTAL.Shortcuts.fit_to_width || e.key == PICTAL.Shortcuts.fit_to_height || e.key == "Enter" || e.key == "NumpadEnter") && (PICTAL.State == "loading" || PICTAL.State == "preview")) {
 				if (e.key != PICTAL.Shortcuts.zoom_in && e.key != "Enter" && e.key != "NumpadEnter") {
@@ -1160,9 +1335,9 @@ function loadPictal() {
 					PICTAL.HEADER.style.display = PICTAL.Rotation % 360 ? "none" : "block";
 				}
 
-				if (PICTAL.Files.length > 1) {
+				if (gallerySize > 1) {
 					if (e.key == "Home" || e.key == "End") {
-						PICTAL.FileIndex = (e.key == "Home" ? 0 : PICTAL.Files.length - 1);
+						HoveredLinks.setIndex(e.key == "Home" ? 0 : gallerySize - 1);
 						loadPreviewFiles();
 					}
 				}
@@ -1180,8 +1355,8 @@ function loadPictal() {
 						if (file.videojs) PICTAL.VIDEOJS.volume(PICTAL.VIDEO.volume);
 					}
 
-					if (e.key == "PageUp" || e.key == "PageDown") {
-						let time = (e.key == "PageUp" ? 1 : -1) * .04;
+					if (e.key == "," || e.key == ".") {
+						let time = (e.key == "." ? 1 : -1) * .04;
 						if (file.videojs) {
 							PICTAL.VIDEOJS.pause();
 							PICTAL.VIDEOJS.currentTime(PICTAL.VIDEOJS.currentTime() + time);
@@ -1201,8 +1376,8 @@ function loadPictal() {
 
 		const step_forward = (e.key == "ArrowRight" || (!e.shiftKey && e.key == " ") || e.key == "PageDown");
 		const step_backward = (e.key == "ArrowLeft" || (e.shiftKey && e.key == " ") || e.key == "PageUp");
-		if ((step_forward || step_backward) && PICTAL.Files.length > 1) {
-			PICTAL.FileIndex = clamp(PICTAL.FileIndex + ((step_forward ? 1 : -1) * ((e.shiftKey && e.key != " ") ? 5 : 1)), 0, PICTAL.Files.length - 1);
+		if ((step_forward || step_backward) && gallerySize > 1) {
+			HoveredLinks.setIndex(clamp(HoveredLinks.getIndex() + ((step_forward ? 1 : -1) * ((e.shiftKey && e.key != " ") ? 5 : 1)), 0, gallerySize - 1));
 			loadPreviewFiles();
 		}
 
@@ -1213,14 +1388,14 @@ function loadPictal() {
 		}
 
 		if (!e.shiftKey && file.video) {
-			if (e.key == " " && (PICTAL.Files.length == 1 || e.ctrlKey)) {
+			if (e.key == " " && (gallerySize == 1 || e.ctrlKey)) {
 				PICTAL.VIDEO.paused ? PICTAL.VIDEO.play() : PICTAL.VIDEO.pause();
 				if (file.videojs) PICTAL.VIDEOJS.paused() ? PICTAL.VIDEOJS.play() : PICTAL.VIDEOJS.pause();
 			}
 		}
 
 		if (file.video) {
-			if ((e.key == "ArrowLeft" || e.key == "ArrowRight") && (PICTAL.Files.length == 1 || e.ctrlKey)) {
+			if ((e.key == "ArrowLeft" || e.key == "ArrowRight") && (gallerySize == 1 || e.ctrlKey)) {
 				const time = (e.key == "ArrowRight" ? 5 : -5) * (e.shiftKey ? 3 : 1);
 				if (file.videojs) {
 					PICTAL.VIDEOJS.currentTime(PICTAL.VIDEOJS.currentTime() + time);
@@ -1230,15 +1405,20 @@ function loadPictal() {
 			}
 		}
 
-		if (!e.ctrlKey && e.shiftKey && e.key == "End" && PICTAL.Files.length > 1 && PICTAL.Center) {
+		if (!e.ctrlKey && e.shiftKey && e.key == "End" && gallerySize > 1) {
+			pauseMouseOut = true;
 			let search = prompt("Enter the number of the page you want to jump to or to the first page with the caption text you're looking for.", "");
+			setTimeout(() => { // prevent mouseout when execution resumes because the browser thinks you moused away
+				pauseMouseOut = false;
+			}, 1);
+
 			if (search) {
-				let index = PICTAL.Files.findIndex(f => f.caption?.includes(search));
+				let index = HoveredLinks.getFiles().findIndex(f => f.caption?.includes(search));
 				if (/^\d+$/.test(search)) { // is number
-					PICTAL.FileIndex = clamp(search - 1, 0, PICTAL.Files.length - 1);
+					HoveredLinks.setIndex(clamp(search - 1, 0, gallerySize - 1));
 					loadPreviewFiles();
 				} else if (index > -1) {
-					PICTAL.FileIndex = index;
+					HoveredLinks.setIndex(index);
 					loadPreviewFiles();
 				} else if (index == -1) {
 					alert(`"${search}" not found.`);
@@ -1256,9 +1436,10 @@ function loadPictal() {
 
 		if ((e.ctrlKey && e.key == "s") || (!e.ctrlKey && e.key == PICTAL.Shortcuts.save_image)) {
 			let filename = file.filename;
+			if (filename == false) return; // option to prevent downloading certain files
 			if (!filename) {
 				let url = new URL(file.url);
-				filename = url.pathname.split("/").pop();
+				filename = url.pathname.replace(/\/$/, "").split("/").pop();
 			}
 
 			// try to download through chrome.downloads.download with just the url
@@ -1290,7 +1471,7 @@ function loadPictal() {
 		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
 		if (PICTAL.State == "loading" || PICTAL.Center) e.preventDefault();
 
-		if (PICTAL.Center && (PICTAL.DIV.contains(e.target) || PICTAL.Files.length == 1)) {
+		if (PICTAL.Center && (PICTAL.DIV.contains(e.target) || HoveredLinks.getFiles().length == 1)) {
 			e.preventDefault();
 			if (e.wheelDelta < 0 && PICTAL.CenterZoom > .1) {
 				PICTAL.CenterZoom *= .75;
@@ -1298,23 +1479,13 @@ function loadPictal() {
 			if (e.wheelDelta > 0 && PICTAL.CenterZoom < 10) {
 				PICTAL.CenterZoom *= 1 / .75;
 			}
-		} else if ((!PICTAL.Center && PICTAL.Files.length > 1) || (PICTAL.Center && !PICTAL.DIV.contains(e.target))) {
+		} else if ((!PICTAL.Center && HoveredLinks.getFiles().length > 1) || (PICTAL.Center && !PICTAL.DIV.contains(e.target))) {
 			e.preventDefault();
 			if (e.wheelDelta < 0) {
-				PICTAL.FileIndex += 1;
+				HoveredLinks.incrementIndex();
 			}
 			if (e.wheelDelta > 0) {
-				PICTAL.FileIndex -= 1;
-			}
-
-			if (PICTAL.Preferences["cyclical_albums"]) {
-				if (PICTAL.FileIndex == PICTAL.Files.length) {
-					PICTAL.FileIndex = 0;
-				} else if (PICTAL.FileIndex == -1) {
-					PICTAL.FileIndex = PICTAL.Files.length - 1;
-				}
-			} else {
-				PICTAL.FileIndex = clamp(PICTAL.FileIndex, 0, PICTAL.Files.length - 1);
+				HoveredLinks.decrementIndex();
 			}
 
 			loadPreviewFiles();

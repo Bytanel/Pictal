@@ -1,6 +1,7 @@
 "use strict";
 
 const platform = location.protocol === "moz-extension:" ? "firefox" : "chrome";
+if (platform == "firefox") var chrome = browser; // firefox doesn't recognize chrome in V2(?)
 
 const DefaultPreferences = {
 	hold_to_activate: "disabled",
@@ -12,9 +13,11 @@ const DefaultPreferences = {
 	instantly_show_cached: true,
 	add_hovered_to_history: false,
 	cyclical_albums: false,
+	loader_offset: 50,
+	keep_cached_gallery_index: true,
 	show_caption: true,
 	wrap_caption: false,
-	caption_position: "top"
+	caption_position: "top",
 };
 
 const DefaultShortcuts = {
@@ -35,6 +38,7 @@ const DefaultShortcuts = {
 	fit_to_height: "4",
 };
 
+// if settings or shortcuts don't exist then fill in with a default value
 function prepareConfig(defaultTbl, tbl) {
 	for (const i in defaultTbl) {
 		if (tbl[i] == null) {
@@ -98,7 +102,7 @@ function onMessage(message, sender, sendResponse) {
 		return true;
 	}
 	if (message.type == "GetVideoJSJavacript") {
-		fetch(chrome.runtime.getURL("lib/videojs/video.min.js")).then(r => r.text())
+		fetch(chrome.runtime.getURL("lib/videojs/video.js")).then(r => r.text())
 			.then(js => {
 				sendResponse({
 					js: js
@@ -150,26 +154,26 @@ function onMessage(message, sender, sendResponse) {
 						"Range": "bytes=0-0"
 					}
 				});
+				await response.body(); // required on Chrome for some reason
 				return response.ok;
 			} catch (err) {
 				return false;
 			}
 		}
 
-		tryURL(message.url).then(ok => {
+		tryURL((platform == "chrome" ? message.url : "")).then(ok => {
 			let url = message.url;
-			if (!ok) {
+			if (!ok && platform == "chrome") {
 				if (!message.blob) {
 					sendResponse({
 						ok: false
 					});
 					return;
 				}
-				url = (platform == "chrome" ? message.url : URL.createObjectURL(message.blob)); // URL.createObjectURL is disabled here in chrome and using blob urls from content.js in firefox has permissions issues
 			}
 			const params = {
 				url: url,
-				filename: message.filename,
+				filename: message.filename || "pictal_downloaded_file", // chrome.downloads.download fails silently if filename is empty
 				conflictAction: "uniquify",
 				saveAs: true
 			};
@@ -201,6 +205,7 @@ function onMessage(message, sender, sendResponse) {
 }
 
 async function registerContentScripts() {
+	if (chrome.runtime.getManifest().manifest_version == 2) return;
 	try {
 		await chrome.userScripts.configureWorld({
 			csp: "script-src 'self' 'unsafe-eval'",
@@ -243,14 +248,25 @@ chrome.runtime.onInstalled.addListener(function(e) {
 });
 
 
-function rewriteUserAgentHeaderAsync(e) {
+function wildcardMatch(url, pattern) {
+	const escaped = pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, "\\$&");
+	const regexStr = "^" + escaped.replace(/\*/g, ".*") + "$";
+	const regex = new RegExp(regexStr, "i");
+	return regex.test(url);
+}
+
+function rewriteRequestUserAgentHeader(e) {
 	for (const sieve of HeaderRules) {
-		if (!e.url.includes(sieve.url_contains)) continue;
+		if (!wildcardMatch(e.url, sieve.url_wildcard)) continue;
 		if (sieve.action == "add" && sieve.apply_on == "request") {
 			e.requestHeaders.push({
 				name: sieve.header_name,
 				value: sieve.header_value
 			});
+		}
+		if (sieve.action == "modify" && sieve.apply_on == "request") {
+			let header = e.requestHeaders.find(i => i.name == sieve.header_name);
+			if (header) header.value = sieve.header_value;
 		}
 	}
 
@@ -259,26 +275,125 @@ function rewriteUserAgentHeaderAsync(e) {
 	};
 }
 
+function rewriteResponseUserAgentHeader(e) {
+	for (const sieve of HeaderRules) {
+		if (!wildcardMatch(e.url, sieve.url_wildcard)) continue;
+		if (sieve.action == "add" && sieve.apply_on == "response") {
+			e.responseHeaders.push({
+				name: sieve.header_name,
+				value: sieve.header_value
+			});
+		}
+		if (sieve.action == "modify" && sieve.apply_on == "response") {
+			let header = e.responseHeaders.find(i => i.name == sieve.header_name);
+			if (header) header.value = sieve.header_value;
+		}
+	}
+	return {
+		responseHeaders: e.responseHeaders
+	};
+}
+
 function addModifyHeaderListeners(sieves) {
-	if (platform != "firefox") return;
 	HeaderRules = new Set();
 	let requestHeadersURLs = [];
+	let responseHeadersURLs = [];
 
 	for (const sieve in sieves) {
 		if (sieves[sieve].modify_headers_json) {
 			JSON.parse(sieves[sieve].modify_headers_json).forEach(rule => {
 				HeaderRules.add(rule);
 				if (rule.apply_on == "request" && rule.url_wildcard) requestHeadersURLs.push(rule.url_wildcard);
+				if (rule.apply_on == "response" && rule.url_wildcard) responseHeadersURLs.push(rule.url_wildcard);
 			})
 		}
 	};
 
 
-	chrome.webRequest.onBeforeSendHeaders.removeListener(rewriteUserAgentHeaderAsync);
-	chrome.webRequest.onBeforeSendHeaders.addListener(
-		rewriteUserAgentHeaderAsync, {
-			urls: requestHeadersURLs
-		},
-		["blocking", "requestHeaders"],
-	);
-}
+	if (platform == "firefox") {
+		chrome.webRequest.onBeforeSendHeaders.removeListener(rewriteRequestUserAgentHeader);
+		if (!requestHeadersURLs.length) return;
+		chrome.webRequest.onBeforeSendHeaders.addListener(
+			rewriteRequestUserAgentHeader, {
+				urls: requestHeadersURLs
+			},
+			["blocking", "requestHeaders"],
+		);
+
+		chrome.webRequest.onHeadersReceived.removeListener(rewriteResponseUserAgentHeader);
+		if (!responseHeadersURLs.length) return;
+		chrome.webRequest.onHeadersReceived.addListener(
+			rewriteResponseUserAgentHeader, {
+				urls: responseHeadersURLs
+			},
+			["blocking", "responseHeaders"]
+		);
+	} else {
+
+		let rules = [];
+		let ruleID = 1;
+		for (const sieve of HeaderRules) {
+			let headers = [
+				{
+					header: sieve.header_name,
+					operation: "set",
+					value: sieve.header_value
+				}
+			]
+
+			let rule = {
+				id: ruleID++,
+				priority: 2,
+				action: {
+					type: "modifyHeaders",
+				},
+				condition: {
+					urlFilter: sieve.url_wildcard,
+					resourceTypes: [
+                	    "main_frame",
+                	    "sub_frame",
+                	    "stylesheet",
+                	    "script",
+                	    "image",
+                	    "font",
+                	    "object",
+                	    "xmlhttprequest",
+                	    "ping",
+                	    "csp_report",
+                	    "media",
+                	    "websocket",
+                	    "webtransport",
+                	    "webbundle",
+                	    "other"
+                	]
+				}
+			};
+
+			if (sieve.apply_on == "request") {
+				rule.action.requestHeaders = headers;
+			} else if (sieve.apply_on == "response") {
+				rule.action.responseHeaders = headers;
+			}
+			
+			rules.push(rule);
+		}
+
+
+		chrome.declarativeNetRequest.getDynamicRules(function (r) {
+		    if (!!r) {
+		        const rulesToDelete = new Array();
+		        r.forEach((rule) => {
+		            rulesToDelete.push(rule.id);
+		        });
+				chrome.declarativeNetRequest.updateDynamicRules({
+					removeRuleIds: rulesToDelete,
+					addRules: rules
+				}, () => {
+					if (chrome.runtime.lastError) {
+						console.error("Error updating dynamic rules:", chrome.runtime.lastError);
+					}
+				});
+		    }
+		});
+	}
+} 

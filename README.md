@@ -136,23 +136,19 @@ If this field is left blank then the full url is passed to the preview as-is.
 
 ## Modify Headers
 
-This is here as a replacement for [Simple Modify Headers](https://github.com/didierfred/SimpleModifyHeaders) but only if you're on Firefox. This is mainly for downloading files and previewing files that require a certain referrer.
-
-Chrome users should stick to using that extension because recreating the functionality on Chrome is too much of a pain due to Manifest V3's restrictions.
+This allows you to modify headers if some pages are expecting certain headers. It does the same job as an extension like [Simple Modify Headers](https://github.com/didierfred/SimpleModifyHeaders).
 
 ### Example
     [{
-    	"url_wildcard": "https://*.google.com/images*",
-    	"url_contains": "google.com/images",
-    	"action": "add",
+    	"url_wildcard": "https://i.pximg.net/img*",
+    	"action": "modify",
     	"apply_on": "request",
     	"header_name": "Referer",
-    	"header_value": "https://google.com/"
+    	"header_value": "https://www.pixiv.net/"
     }, {
     	"url_wildcard": "https://example.com/*",
-    	"url_contains": "example.com/",
     	"action": "add",
-    	"apply_on": "request",
-    	"header_name": "Referer",
-    	"header_value": "https://example.com/"
+    	"apply_on": "response",
+    	"header_name": "Access-Control-Allow-Origin",
+    	"header_value": "*"
     }]
