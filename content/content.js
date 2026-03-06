@@ -1,6 +1,5 @@
 "use strict";
 
-const platform = (navigator.vendor != "Google Inc.") ? "firefox" : "chrome";
 const protocolRegex = new RegExp(/^(?:(https?:\/\/(?:www\.)?))?(.*)$/i);
 
 chrome.runtime.sendMessage({
@@ -30,109 +29,49 @@ chrome.runtime.sendMessage({
 	if (window.location.hash.includes("PICTALFILENAME=")) {
 		downloadFile();
 	} else if (window == window.top && !blacklisted && document.contentType == "text/html") { // don't run in iframes and only run on web pages, not direct media files
-		if (platform == "chrome") {
-			// has to be done here otherwise throws errors for some reason
-			chrome.runtime.sendMessage({
-				type: "GetVideoJSJavacript"
-			}, (response) => {
-				eval(response.js);
-			});
-		}
+		// has to be done here otherwise throws errors for some reason
+		chrome.runtime.sendMessage({
+			type: "GetVideoJSJavacript"
+		}, (response) => {
+			eval(response.js);
+		});
 
 		loadPictal();
 	}
 });
 
-if (platform == "firefox") {
-	// required for Firefox Manifest V2
-	function injectFetch(url) {
-		return new Promise((resolve, reject) => {
-			const requestID = "PICTAL_" + Math.random().toString(36).slice(2);
 
-			function handleMessage(event) {
-				if (event.source !== window) return;
-				if (!event.data || event.data.requestID !== requestID || !event.data.type.startsWith("PICTAL_FETCH_")) return;
-
-				window.removeEventListener("message", handleMessage);
-
-				if (event.data.type === "PICTAL_FETCH_RESULT") {
-					resolve({
-						status: event.data.status,
-						body: event.data.body,
-						headers: event.data.headers
-					});
-				} else {
-					reject();
-				}
-			}
-
-			window.addEventListener("message", handleMessage);
-
-			window.postMessage({
-				type: "PICTAL_FETCH",
-				requestID,
-				url
-			}, "*");
+async function makeRequest(method, url, blob = false) {
+	try {
+		// try from page context with cookies
+		var response = await fetch(url, {
+			method: method,
+			cache: "default"
 		});
-	}
-	
-	var makeRequest = async function(url, method, blob = false) {
-		return await injectFetch(url).then(({
-			status,
-			body,
-			headers
-		}) => {
-			return {
-				status: status,
-				headers: headers,
-				body: body
-			};
-		}).catch(async () => {
-			let response = await chrome.runtime.sendMessage({
-				type: "MakeRequest",
-				url: url,
-				method: method
-			});
-			return {
-				status: response.status,
-				headers: response.header,
-				body: response.body
-			};
-		});
-	}
-} else {
-	var makeRequest = async function(url, method, blob = false) {
-		try {
-			// try from page context with cookies
-			var response = await fetch(url, {
-				method: method,
-				cache: "default"
-			});
-			if (blob) {
-				var body = await response.blob();
-			} else {
-				var body = await response.text();
-			}
-			var headers = {};
-			response.headers.forEach((value, key) => {
-				headers[key] = value;
-			});
-		} catch (error) {
-			// try from service worker
-			var response = await chrome.runtime.sendMessage({
-				type: "MakeRequest",
-				url: url,
-				method: method
-			});
-			var body = response.body;
-			var headers = response.headers;
+		if (blob) {
+			var body = await response.blob();
+		} else {
+			var body = await response.text();
 		}
-		return {
-			status: response.status,
-			headers: headers,
-			body: body
-		};
+		var headers = {};
+		response.headers.forEach((value, key) => {
+			headers[key] = value;
+		});
+	} catch (error) {
+		// try from service worker
+		var response = await chrome.runtime.sendMessage({
+			type: "MakeRequest",
+			url: url,
+			method: method
+		});
+		var body = response.body;
+		var headers = response.headers;
 	}
+	return {
+		status: response.status,
+		headers: headers,
+		body: body
+	};
 }
 
 
@@ -151,7 +90,7 @@ function downloadFile() {
 			vid.pause();
 		});
 
-		makeRequest(link, "GET", true).then(resp => {
+		makeRequest("GET", link, true).then(resp => {
 			chrome.runtime.sendMessage({
 				type: "Download",
 				url: URL.createObjectURL(resp.body), // CHROME: URL.createObjectURL is disabled in service workers but you can just do it here and pass the url lol
@@ -167,15 +106,13 @@ function downloadFile() {
 }
 
 function loadPictal() {
-	if (platform == "chrome") {
-		chrome.runtime.sendMessage({
-			type: "GetVideoJSCSS"
-		}, (response) => {
-			const style = document.createElement("style");
-			style.textContent = response.css;
-			document.documentElement.appendChild(style);
-		});
-	}
+	chrome.runtime.sendMessage({
+		type: "GetVideoJSCSS"
+	}, (response) => {
+		const style = document.createElement("style");
+		style.textContent = response.css;
+		document.documentElement.appendChild(style);
+	});
 	chrome.runtime.sendMessage({
 		type: "GetSieves"
 	}, (response) => {
@@ -186,20 +123,13 @@ function loadPictal() {
 	}, (response) => {
 		PICTAL.Preferences = response.preferences;
 		PICTAL.Volume = PICTAL.Preferences["video_volume"] / 100;
+		reset();
 	});
 	chrome.runtime.sendMessage({
 		type: "GetShortcuts"
 	}, (response) => {
 		PICTAL.Shortcuts = response.shortcuts;
 	});
-
-	if (platform == "firefox") {
-		// bypass Content-Security-Policy protections by loading the code through a local extension url
-		const script = document.createElement("script");
-		script.src = browser.runtime.getURL("content/injectFetch.js");
-		script.id = "PICTAL-INJECTED";
-		(document.head || document.documentElement).appendChild(script);
-	}
 
 	// object meant to organize the files and metadata used for the preview
 	class URLCache {
@@ -269,8 +199,6 @@ function loadPictal() {
 	const PICTAL = {
 		State: "idle",
 		isHoldingActivateKey: false,
-		Center: false,
-		CenterZoom: .75,
 		MouseX: 0,
 		MouseY: 0,
 		Muted: false,
@@ -278,7 +206,6 @@ function loadPictal() {
 		LastFilePreviewed: null,
 		Scale: [1, 1],
 		Rotation: 0,
-		ViewMode: "default",
 		HoverTimer: null,
 	}
 
@@ -360,13 +287,13 @@ function loadPictal() {
 			PICTAL.DIV.style.display = "initial";
 			PICTAL.IMG.style.display = "initial";
 			PICTAL.State = "preview";
-			HoveredLinks.setAsCached(src);
 
 			fileLoaded();
 			renderFrame();
 		};
 		PICTAL.IMG.addEventListener("load", function(e) {
 			PICTAL.IMG.onloadeddata(e.target.src);
+			HoveredLinks.setAsCached(e.target.src);
 			if (!PICTAL.Preferences["preload_ahead"]) return;
 
 			for (let i = HoveredLinks.getIndex(); i <= HoveredLinks.getIndex() + 2; i++) {
@@ -510,11 +437,12 @@ function loadPictal() {
 		background-color: rgb(255, 255, 255);
 		background-clip: padding-box;
 		z-index: 2147483647;
-		width: 38px;
-		height: 38px;
+		width: 28px;
+		height: 28px;
 		inset: 0;
 		margin: 0;
 		pointer-events: none;
+		box-sizing: initial;
 	`;
 	PICTAL.LOADER.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOng9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWluWU1pbiBub25lIj48Zz48cGF0aCBpZD0icCIgZD0iTTMzIDQyYTEgMSAwIDAgMSA1NS0yMCAzNiAzNiAwIDAgMC01NSAyMCIvPjx1c2UgeDpocmVmPSIjcCIgdHJhbnNmb3JtPSJyb3RhdGUoNzIgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgxNDQgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgyMTYgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgyODggNTAgNTApIi8+PGFuaW1hdGVUcmFuc2Zvcm0gYXR0cmlidXRlTmFtZT0idHJhbnNmb3JtIiB0eXBlPSJyb3RhdGUiIHZhbHVlcz0iMzYwIDUwIDUwOzAgNTAgNTAiIGR1cj0iMS44cyIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48L2c+PC9zdmc+";
 	document.documentElement.appendChild(PICTAL.LOADER);
@@ -527,12 +455,12 @@ function loadPictal() {
 		const maxWidth = window.innerWidth - 25;
 
 		PICTAL.LOADER.style.display = "initial";
-		if (PICTAL.Center) {
+		if (PICTAL.Center && !PICTAL.Preferences["always_full_zoom"]) {
 			PICTAL.LOADER.style.top = `${(maxHeight / 2)}px`;
 			PICTAL.LOADER.style.left = `${(maxWidth / 2)}px`;
 		} else {
 			const offset = Number(PICTAL.Preferences["loader_offset"]);
-			const loaderOffset = 48 / 2;
+			const loaderOffset = 38 / 2;
 			const x = PICTAL.MouseX - loaderOffset;
 			const y = PICTAL.MouseY - loaderOffset;
 
@@ -542,7 +470,7 @@ function loadPictal() {
 				PICTAL.LOADER.style.left = `${x - offset}px`;
 			}
 			if (PICTAL.MouseY < maxHeight / 2) {
-				PICTAL.LOADER.style.top = `${y + offset}px`;
+				PICTAL.LOADER.style.top = `${y + offset + 20}px`;
 			} else {
 				PICTAL.LOADER.style.top = `${y - offset}px`;
 			}
@@ -576,6 +504,8 @@ function loadPictal() {
 		const gallerySize = HoveredLinks.getFiles().length;
 		const [elHeight, elWidth] = getResolution();
 
+		PICTAL.DIV.style.pointerEvents = PICTAL.Center ? "initial" : "none";
+
 		PICTAL.HEADER.style.display = (gallerySize > 1 || file.caption || PICTAL.Preferences["show_resolution"]) ? "block" : "none";
 		if (gallerySize > 1) {
 			PICTAL.PAGINATOR.style.display = "initial";
@@ -599,17 +529,18 @@ function loadPictal() {
 		}
 	}
 
-	function loadPreviewFiles() {
-
+	function loadPreviewFile() {
 		const file = HoveredLinks.getFile();
 		if (PICTAL.LastFilePreviewed == file.url) return;
 		PICTAL.LastFilePreviewed = file.url;
 
 		clearInterval(PICTAL.IMGTIMER);
 		PICTAL.DIV.style.display = "none";
-		PICTAL.CenterZoom = .75;
-		PICTAL.IMG.style.display = "none";
 
+		PICTAL.CenterZoom = 1;
+		PICTAL.ViewMode = PICTAL.Preferences["default_zoom_mode"];
+
+		PICTAL.IMG.style.display = "none";
 		PICTAL.VIDEO.style.display = "none";
 		PICTAL.VIDEO.pause();
 
@@ -652,7 +583,7 @@ function loadPictal() {
 
 	function handleFiles(fullURL, files) {
 		if (!files?.length) {
-			console.error("Empty files");
+			console.error("[Files Object Check]", "The returned array is empty.");
 			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 			return;
 		}
@@ -661,7 +592,7 @@ function loadPictal() {
 
 		HoveredLinks.add(fullURL, files);
 		HoveredLinks.set(fullURL);
-		loadPreviewFiles();
+		loadPreviewFile();
 	}
 
 
@@ -701,7 +632,7 @@ function loadPictal() {
 				PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
 				HoveredLinks.set(fullURL);
 				if (!PICTAL.Preferences["keep_cached_gallery_index"]) HoveredLinks.setIndex(0);
-				loadPreviewFiles();
+				loadPreviewFile();
 				return;
 			}
 
@@ -715,87 +646,32 @@ function loadPictal() {
 			}
 
 			if (sieveType == "link") {
-				let request_url = fullURL;
 				const link_regex = new RegExp(sieve.link_regex, "i");
 
-				if (sieve.link_request_javascript) {
+				async function runParseJavascript() {
 					try {
-						request_url = Function(`'use strict';` + sieve.link_request_javascript).bind({
+						var files = await Function(`'use strict'; return (async () => {${sieve.link_parse_javascript}})();`).bind({
 							protocol: protocol,
 							link: link,
 							regex: link_regex,
 							regex_match: link.match(link_regex),
+							request: makeRequest,
 							node: target
 						})();
-						request_url = request_url;
 					} catch (error) {
-						console.error("[link_request_javascript]:", error);
-						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-						return;
-					}
-					if (typeof request_url != "string") {
-						console.error("[link_request_javascript]:", "The returned object is not a string.");
-						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-						return;
-					}
-				}
-
-
-				function runParseJavascript(body, passthrough = {}) {
-					try {
-						var files = Function(`'use strict';` + sieve.link_parse_javascript).bind({
-							protocol: protocol,
-							link: link,
-							regex: link_regex,
-							regex_match: link.match(link_regex),
-							node: target,
-							body: body,
-							passthrough: passthrough,
-						})();
-					} catch (error) {
-						console.error("[link_parse_javascript]", error);
+						console.error("[Link Parse Javascript]", error);
 						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 						return [];
 					}
 					return files;
 				}
 
-				function recursiveRequest(url, passthrough = {}) {
-					return makeRequest(url, "GET").then(resp => {
-						if (PICTAL.State != "loading" || target != PICTAL.TargetedElement) return;
-						const body = resp.body;
-
-						if (!body) {
-							console.error(`${url} returned without a body.`);
-							PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-							return;
-						}
-
-
-						const files = runParseJavascript(body, passthrough);
-
-						if (files?.loop) {
-							return recursiveRequest(files.loop, files?.passthrough);
-						}
-
-						if (!files?.length || typeof files != "object") {
-							console.error("[link_parse_javascript]:", "The returned object is not an array.");
-							PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-							return;
-						}
-
-						return files;
-					}).then(r => r);
-				}
-
 				if (!sieve.link_parse_javascript) {
 					handleFiles(fullURL, [{
-						url: request_url
+						url: fullURL
 					}]);
-				} else if (!sieve.link_request_javascript) {
-					handleFiles(fullURL, runParseJavascript(""));
 				} else {
-					recursiveRequest(request_url).then(files => {
+					runParseJavascript().then(files => {
 						handleFiles(fullURL, files);
 					});
 				}
@@ -815,7 +691,7 @@ function loadPictal() {
 							node: target
 						})();
 					} catch (error) {
-						console.error("[image_parse_javascript]:", error);
+						console.error("[Image Parse Javascript]:", error);
 						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 						return;
 					}
@@ -839,7 +715,7 @@ function loadPictal() {
 
 				// look for valid links and figure out the filetype
 				for (const l in links) {
-					makeRequest(links[l], "HEAD").then(resp => {
+					makeRequest("HEAD", links[l]).then(resp => {
 						if (resp.status == 200 || resp.status == 206) {
 							let files = [{
 								url: links[l]
@@ -1026,6 +902,7 @@ function loadPictal() {
 		if (targetURL) {
 			PICTAL.TargetedElement = target;
 			PICTAL.TargetedElement.title = ""; // hide tooltips that would interfere with the preview window
+			PICTAL.LOADER.style.backgroundColor = COLORS.WHITE;
 			PICTAL.State = "selecting";
 
 			updateOutline();
@@ -1073,7 +950,7 @@ function loadPictal() {
 				heightBoundsBottom = 35;
 			} else {
 				heightBoundsTop = 20;
-				heightBoundsBottom = 15;
+				heightBoundsBottom = 10;
 			}
 		}
 		const maxHeight = document.documentElement.clientHeight - heightBoundsTop - heightBoundsBottom;
@@ -1106,20 +983,26 @@ function loadPictal() {
 
 				if (PICTAL.MouseY < maxHeight / 2) { // top half of page
 					top = top - diff;
-					top = clamp(top, -diff, maxHeight - height + diff - 15);
+					top = clamp(top, -diff, maxHeight - height + diff + (heightBoundsTop / 2) + heightBoundsBottom);
 				} else { // bottom half of page
 					top = top - height + diff;
-					top = clamp(top, -diff + 10, maxHeight - height + diff + 20) - 10;
+					top = clamp(top, -diff, maxHeight - height + diff);
 				}
 
 				left = (PICTAL.MouseX < maxWidth / 2) ? left + diff : left - width - diff - 20; // left and right half of page
 				left = clamp(left, diff, maxWidth - height + diff - 10);
 			} else {
-				left = (PICTAL.MouseX < maxWidth / 2) ? left : left - width - 20;
-				left = clamp(left, 0, maxWidth - width - 10);
+				if (PICTAL.MouseX < maxWidth / 2) {
+					left = Math.min(left, maxWidth - width);
+				} else {
+					left = Math.max(left - width, 0);
+				}
 
-				top = (PICTAL.MouseY < maxHeight / 2) ? top : top - height;
-				top = clamp(top, heightBoundsTop, maxHeight - height);
+				if (PICTAL.MouseY < maxHeight / 2) {
+					top = Math.min(top, maxHeight - height + heightBoundsTop);
+				} else {
+					top = Math.max(top - height, heightBoundsTop);
+				}
 			}
 
 			PICTAL.DIV.style.top = `${top}px`;
@@ -1143,7 +1026,7 @@ function loadPictal() {
 				PICTAL.ViewMode = "natural_size";
 			}
 
-			if (PICTAL.ViewMode == "default" || PICTAL.ViewMode == "auto_fit") {
+			if (PICTAL.ViewMode == "auto_fit") {
 				height *= PICTAL.CenterZoom * scale;
 				width *= PICTAL.CenterZoom * scale;
 			} else if (PICTAL.ViewMode == "natural_size") {
@@ -1183,6 +1066,10 @@ function loadPictal() {
 		requestAnimationFrame(renderFrame);
 	}
 
+	function hidePreview() {
+
+	}
+
 	// stop everything and reset to initial conditions
 	function reset() {
 		if (PICTAL.HoverTimer) {
@@ -1193,14 +1080,13 @@ function loadPictal() {
 		PICTAL.OUTLINE.style.opacity = "0";
 		PICTAL.LOADER.style.display = "none";
 		PICTAL.LOADER.style.backgroundColor = COLORS.WHITE;
-		PICTAL.CenterZoom = .75;
-		PICTAL.Center = false;
+		PICTAL.Center = PICTAL.Preferences["always_full_zoom"];
 		PICTAL.TargetedElement = null;
 		PICTAL.State = "idle";
 		PICTAL.LastFilePreviewed = null;
 		PICTAL.Scale = [1, 1];
 		PICTAL.Rotation = 0;
-		PICTAL.ViewMode = "default";
+		PICTAL.ViewMode = PICTAL.Preferences["default_zoom_mode"];
 
 		if (!PICTAL.DIV) return;
 
@@ -1219,7 +1105,14 @@ function loadPictal() {
 
 	let pauseMouseOut = false;
 	document.addEventListener("mouseout", (e) => {
-		if (PICTAL.State != "idle" && !PICTAL.Center && !PICTAL.TargetedElement?.contains(e.relatedTarget) && !pauseMouseOut) {
+		if (PICTAL.State == "idle") return;
+		if (PICTAL.State == "selecting") {
+			reset();
+		}
+		if (PICTAL.State == "loading" && !PICTAL.Center && !PICTAL.Preferences["always_full_zoom"]) {
+			reset();
+		}
+		if (PICTAL.State == "preview" && !PICTAL.Center && !PICTAL.TargetedElement?.contains(e.relatedTarget) && !pauseMouseOut) {
 			reset();
 		}
 	});
@@ -1238,6 +1131,7 @@ function loadPictal() {
 		passive: false
 	});
 
+	// TODO: rewrite shortcut system
 	window.addEventListener("keydown", (e) => {
 		if (e.target.isContentEditable || e.target.localName == "input") return; // if typing in an input, don't use shortcuts
 
@@ -1282,7 +1176,8 @@ function loadPictal() {
 						break;
 					default:
 						PICTAL.Center = !PICTAL.Center;
-						PICTAL.CenterZoom = .75;
+						PICTAL.CenterZoom = 1;
+						if (PICTAL.Preferences["always_full_zoom"]) reset();
 				}
 
 				PICTAL.DIV.style.pointerEvents = PICTAL.Center ? "initial" : "none";
@@ -1338,7 +1233,7 @@ function loadPictal() {
 				if (gallerySize > 1) {
 					if (e.key == "Home" || e.key == "End") {
 						HoveredLinks.setIndex(e.key == "Home" ? 0 : gallerySize - 1);
-						loadPreviewFiles();
+						loadPreviewFile();
 					}
 				}
 
@@ -1378,7 +1273,7 @@ function loadPictal() {
 		const step_backward = (e.key == "ArrowLeft" || (e.shiftKey && e.key == " ") || e.key == "PageUp");
 		if ((step_forward || step_backward) && gallerySize > 1) {
 			HoveredLinks.setIndex(clamp(HoveredLinks.getIndex() + ((step_forward ? 1 : -1) * ((e.shiftKey && e.key != " ") ? 5 : 1)), 0, gallerySize - 1));
-			loadPreviewFiles();
+			loadPreviewFile();
 		}
 
 		if (PICTAL.State != "preview") return;
@@ -1416,10 +1311,10 @@ function loadPictal() {
 				let index = HoveredLinks.getFiles().findIndex(f => f.caption?.includes(search));
 				if (/^\d+$/.test(search)) { // is number
 					HoveredLinks.setIndex(clamp(search - 1, 0, gallerySize - 1));
-					loadPreviewFiles();
+					loadPreviewFile();
 				} else if (index > -1) {
 					HoveredLinks.setIndex(index);
-					loadPreviewFiles();
+					loadPreviewFile();
 				} else if (index == -1) {
 					alert(`"${search}" not found.`);
 				}
@@ -1449,7 +1344,7 @@ function loadPictal() {
 				filename: filename
 			}, (resp) => {
 				if (resp.ok == false) {
-					// have to window.open, chrome.tabs.create doesn't work for all cases
+					// have to use window.open, chrome.tabs.create doesn't work for all cases
 					// chrome.downloads.download returns immediately in chrome so we can't use a separate window because the download window is also closed upon window.close
 					window.open(file.url + "#PICTALFILENAME=" + filename, "_blank");
 				}
@@ -1476,7 +1371,7 @@ function loadPictal() {
 			if (e.wheelDelta < 0 && PICTAL.CenterZoom > .1) {
 				PICTAL.CenterZoom *= .75;
 			}
-			if (e.wheelDelta > 0 && PICTAL.CenterZoom < 10) {
+			if (e.wheelDelta > 0 && PICTAL.CenterZoom < 50) {
 				PICTAL.CenterZoom *= 1 / .75;
 			}
 		} else if ((!PICTAL.Center && HoveredLinks.getFiles().length > 1) || (PICTAL.Center && !PICTAL.DIV.contains(e.target))) {
@@ -1488,7 +1383,7 @@ function loadPictal() {
 				HoveredLinks.decrementIndex();
 			}
 
-			loadPreviewFiles();
+			loadPreviewFile();
 		}
 	}, {
 		capture: true,

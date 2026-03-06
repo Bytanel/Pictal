@@ -22,8 +22,8 @@ Development is primarily focused on Firefox because that is what I use and the p
 # Differences Between Pictal and Imagus
 
 * There isn't feature parity with Imagus (yet). A lot of preferences, some shortcuts, and sieve settings are missing although if there is demand for those features then they could be added.
-* On Chrome, the image save system uses custom workarounds to download tricky images. On Firefox, there is included a system to modify headers like Simple Modify Headers.
-* There is native VideoJS support, an extension system is unneeded.
+* There is included a system to modify headers like Simple Modify Headers.
+* There is native VideoJS support for HLS and MPD streams, an extension system is unneeded.
 * The core of the sieve only uses javascript, there is no swapping between javascript mode and regex mode. I want this to be as simple as possible.
 * The grant/site filter system only uses regex, there is no swapping between modes.
 * There is no high resolution and low resolution mode, you can only choose one url.
@@ -137,6 +137,8 @@ If this field is left blank then the full url is passed to the preview as-is.
 ## Modify Headers
 
 This allows you to modify headers if some pages are expecting certain headers. It does the same job as an extension like [Simple Modify Headers](https://github.com/didierfred/SimpleModifyHeaders).
+
+NOTE: The `add` and `modify` actions do the same thing.
 
 ### Example
     [{

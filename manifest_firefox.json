@@ -1,40 +1,46 @@
 {
-	"manifest_version": 2,
-	"name": "Pictal",
-	"version": "2026.3.3",
-	"description": "Enlarge and preview images and videos from links.",
-	"homepage_url": "https://github.com/Bytanel/Pictal",
-	"web_accessible_resources": [
-		"data/sieves.json"
-	],
-	"permissions": [
-		"cookies",
-		"downloads",
-		"history",
-		"storage",
-		"webRequest",
-		"webRequestBlocking",
-		"<all_urls>"
-	],
-	"content_scripts": [{
-		"matches": ["<all_urls>"],
-		"js": [
-			"content/content.js",
-			"lib/videojs/video.js"
-		],
-		"css": [
-			"lib/videojs/video-js.min.css"
-		],
-		"run_at": "document_start"
-	}],
-	"incognito": "spanning",
-	"background": {
-		"scripts": [
-			"background/service.js"
-		]
-	},
-	"options_ui": {
-		"page": "options/options.html",
-		"open_in_tab": true
-	}
+  "manifest_version": 3,
+  "name": "Pictal",
+  "version": "2026.3.3",
+  "description": "Enlarge and preview images and videos from links.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{0ccd9321-7982-444d-b5f6-e4acd31af8d5}",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["data/sieves.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "permissions": [
+    "cookies",
+    "downloads",
+    "history",
+    "storage",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "optional_permissions": [
+    "userScripts"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "incognito": "spanning",
+  "background": {
+    "scripts": [
+      "background/service.js"
+    ]
+  },
+  "options_ui": {
+  	"page": "options/options.html",
+  	"open_in_tab": true
+  }
 }

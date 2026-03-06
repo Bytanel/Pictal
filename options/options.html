@@ -85,9 +85,9 @@
 			</span>
 		</div>
 		<div class="prow">
-			<label>Loading spinner distance from mouse</label>
+			<label>Loading spinner distance from mouse (px)</label>
 			<span>
-				<input name="loader_offset" type="number" step="1" min="0" max="250" value="50">
+				<input name="loader_offset" type="number" step="1" min="0" max="250" value="25">
 			</span>
 		</div>
 		<div class="prow">
@@ -95,6 +95,24 @@
 			<span>
 				<input id="keep_cached_gallery_index" name="keep_cached_gallery_index" type="checkbox" style="display: none">
 				<label for="keep_cached_gallery_index" class="checkbox"></label>
+			</span>
+		</div>
+		<div class="prow">
+			<label for="default_zoom_mode">Default zoom-mode</label>
+			<span>
+				<select id="default_zoom_mode" name="default_zoom_mode">
+					<option value="natural_size">natural size</option>
+					<option value="auto_fit" selected>auto fit</option>
+					<option value="fit_to_width">fit to width</option>
+					<option value="fit_to_height">fit to height</option>
+				</select>
+			</span>
+		</div>
+		<div class="prow">
+			<label>Always view in full-zoom mode</label>
+			<span>
+				<input id="always_full_zoom" name="always_full_zoom" type="checkbox" style="display: none">
+				<label for="always_full_zoom" class="checkbox"></label>
 			</span>
 		</div>
 		<h4>Caption</h4>
@@ -115,7 +133,7 @@
 		<div class="prow">
 			<label for="caption_position">Caption placement</label>
 			<span>
-				<select id="caption_position" name="caption_position" class="number">
+				<select id="caption_position" name="caption_position">
 					<option>top</option>
 					<option>bottom</option>
 				</select>
@@ -129,7 +147,7 @@
 			<li><label><input name="wrap_caption" value=""> <span>Wrap caption</span></label></li>
 			<li><label><input name="open_image_in_new_tab" value=""> <span>Open image in a new tab</span></label></li>
 			<li><label><input name="add_to_history" value=""> <span>Add to browser history</span></label></li>
-			<li><label><input name="save_image" value="">, <b>Ctrl + S</b> <span>Save image</span></label></li>
+			<li><label><input name="save_image" value="">, <b>Ctrl + S</b> <span>Save pop-up content</span></label></li>
 			<li><label><input name="close_preview" value="">, <b>Esc</b> <span>Hide the pop-up</span></label></li>
 			<li><b>Ctrl + C</b> <label>Copy URL to clipboard</label></li>
 			<li><b>+</b> / <b>-</b> <span>Zoom in / out</span></li>
@@ -184,7 +202,7 @@
 			<div class="action_buttons">
 				<span id="import_sieves" title="Import sieves">&darr;</span>
 				<span id="update_sieves" title="Update sieves from repository">&dArr;</span>
-				<span id="copy_rules_to_clipboard" title="Copy all rules to clipboard.">&#x1F4CB;</span>
+				<span id="copy_rules_to_clipboard" title="Copy all sieves to clipboard.">&#x1F4CB;</span>
 			</div>
 		</div>
 		<div id="sieve_container" class="cf"></div>

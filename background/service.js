@@ -1,7 +1,6 @@
 "use strict";
 
 const platform = location.protocol === "moz-extension:" ? "firefox" : "chrome";
-if (platform == "firefox") var chrome = browser; // firefox doesn't recognize chrome in V2(?)
 
 const DefaultPreferences = {
 	hold_to_activate: "disabled",
@@ -10,14 +9,16 @@ const DefaultPreferences = {
 	video_volume: 50,
 	show_resolution: false,
 	preload_ahead: true,
-	instantly_show_cached: true,
+	instantly_show_cached: false,
 	add_hovered_to_history: false,
 	cyclical_albums: false,
-	loader_offset: 50,
+	loader_offset: 25,
 	keep_cached_gallery_index: true,
 	show_caption: true,
 	wrap_caption: false,
 	caption_position: "top",
+	default_zoom_mode: "auto_fit",
+	always_full_zoom: false
 };
 
 const DefaultShortcuts = {
@@ -198,14 +199,13 @@ function onMessage(message, sender, sendResponse) {
 	}
 	if (message.type == "ReloadListeners") {
 		getSieves().then(sieve => {
-			addModifyHeaderListeners(sieve);
+			addModifyHeaderRules(sieve);
 		});
 		return;
 	}
 }
 
 async function registerContentScripts() {
-	if (chrome.runtime.getManifest().manifest_version == 2) return;
 	try {
 		await chrome.userScripts.configureWorld({
 			csp: "script-src 'self' 'unsafe-eval'",
@@ -240,106 +240,25 @@ chrome.runtime.onInstalled.addListener(function(e) {
 	if (e.reason === "update") {
 		registerContentScripts();
 		getSieves().then(sieve => {
-			addModifyHeaderListeners(sieve);
+			addModifyHeaderRules(sieve);
 		});
 	} else if (e.reason === "install") {
 		chrome.runtime.openOptionsPage();
 	}
 });
 
-
-function wildcardMatch(url, pattern) {
-	const escaped = pattern.replace(/[-\/\\^$+?.()|[\]{}]/g, "\\$&");
-	const regexStr = "^" + escaped.replace(/\*/g, ".*") + "$";
-	const regex = new RegExp(regexStr, "i");
-	return regex.test(url);
-}
-
-function rewriteRequestUserAgentHeader(e) {
-	for (const sieve of HeaderRules) {
-		if (!wildcardMatch(e.url, sieve.url_wildcard)) continue;
-		if (sieve.action == "add" && sieve.apply_on == "request") {
-			e.requestHeaders.push({
-				name: sieve.header_name,
-				value: sieve.header_value
-			});
-		}
-		if (sieve.action == "modify" && sieve.apply_on == "request") {
-			let header = e.requestHeaders.find(i => i.name == sieve.header_name);
-			if (header) header.value = sieve.header_value;
-		}
-	}
-
-	return {
-		requestHeaders: e.requestHeaders
-	};
-}
-
-function rewriteResponseUserAgentHeader(e) {
-	for (const sieve of HeaderRules) {
-		if (!wildcardMatch(e.url, sieve.url_wildcard)) continue;
-		if (sieve.action == "add" && sieve.apply_on == "response") {
-			e.responseHeaders.push({
-				name: sieve.header_name,
-				value: sieve.header_value
-			});
-		}
-		if (sieve.action == "modify" && sieve.apply_on == "response") {
-			let header = e.responseHeaders.find(i => i.name == sieve.header_name);
-			if (header) header.value = sieve.header_value;
-		}
-	}
-	return {
-		responseHeaders: e.responseHeaders
-	};
-}
-
-function addModifyHeaderListeners(sieves) {
-	HeaderRules = new Set();
-	let requestHeadersURLs = [];
-	let responseHeadersURLs = [];
-
+function addModifyHeaderRules(sieves) {
+	let rules = [];
+	let ruleID = 1;
 	for (const sieve in sieves) {
-		if (sieves[sieve].modify_headers_json) {
-			JSON.parse(sieves[sieve].modify_headers_json).forEach(rule => {
-				HeaderRules.add(rule);
-				if (rule.apply_on == "request" && rule.url_wildcard) requestHeadersURLs.push(rule.url_wildcard);
-				if (rule.apply_on == "response" && rule.url_wildcard) responseHeadersURLs.push(rule.url_wildcard);
-			})
-		}
-	};
-
-
-	if (platform == "firefox") {
-		chrome.webRequest.onBeforeSendHeaders.removeListener(rewriteRequestUserAgentHeader);
-		if (!requestHeadersURLs.length) return;
-		chrome.webRequest.onBeforeSendHeaders.addListener(
-			rewriteRequestUserAgentHeader, {
-				urls: requestHeadersURLs
-			},
-			["blocking", "requestHeaders"],
-		);
-
-		chrome.webRequest.onHeadersReceived.removeListener(rewriteResponseUserAgentHeader);
-		if (!responseHeadersURLs.length) return;
-		chrome.webRequest.onHeadersReceived.addListener(
-			rewriteResponseUserAgentHeader, {
-				urls: responseHeadersURLs
-			},
-			["blocking", "responseHeaders"]
-		);
-	} else {
-
-		let rules = [];
-		let ruleID = 1;
-		for (const sieve of HeaderRules) {
-			let headers = [
-				{
-					header: sieve.header_name,
-					operation: "set",
-					value: sieve.header_value
-				}
-			]
+		if (!sieves[sieve].modify_headers_json) continue;
+		JSON.parse(sieves[sieve].modify_headers_json).forEach(sieveRule => {
+			if (!sieveRule.header_name || !sieveRule.header_value || !sieveRule.url_wildcard || !sieveRule.apply_on) return;
+			let headers = [{
+				header: sieveRule.header_name,
+				operation: "set",
+				value: sieveRule.header_value
+			}];
 
 			let rule = {
 				id: ruleID++,
@@ -348,52 +267,52 @@ function addModifyHeaderListeners(sieves) {
 					type: "modifyHeaders",
 				},
 				condition: {
-					urlFilter: sieve.url_wildcard,
+					urlFilter: sieveRule.url_wildcard,
 					resourceTypes: [
-                	    "main_frame",
-                	    "sub_frame",
-                	    "stylesheet",
-                	    "script",
-                	    "image",
-                	    "font",
-                	    "object",
-                	    "xmlhttprequest",
-                	    "ping",
-                	    "csp_report",
-                	    "media",
-                	    "websocket",
-                	    "webtransport",
-                	    "webbundle",
-                	    "other"
-                	]
+						"main_frame",
+						"sub_frame",
+						"stylesheet",
+						"script",
+						"image",
+						"font",
+						"object",
+						"xmlhttprequest",
+						"ping",
+						"csp_report",
+						"media",
+						"websocket",
+						//"webtransport",
+						//"webbundle",
+						"other"
+					]
 				}
 			};
 
-			if (sieve.apply_on == "request") {
+			if (sieveRule.apply_on == "request") {
 				rule.action.requestHeaders = headers;
-			} else if (sieve.apply_on == "response") {
+			} else if (sieveRule.apply_on == "response") {
 				rule.action.responseHeaders = headers;
 			}
-			
+
 			rules.push(rule);
-		}
-
-
-		chrome.declarativeNetRequest.getDynamicRules(function (r) {
-		    if (!!r) {
-		        const rulesToDelete = new Array();
-		        r.forEach((rule) => {
-		            rulesToDelete.push(rule.id);
-		        });
-				chrome.declarativeNetRequest.updateDynamicRules({
-					removeRuleIds: rulesToDelete,
-					addRules: rules
-				}, () => {
-					if (chrome.runtime.lastError) {
-						console.error("Error updating dynamic rules:", chrome.runtime.lastError);
-					}
-				});
-		    }
 		});
 	}
-} 
+
+
+	chrome.declarativeNetRequest.getDynamicRules(function(r) {
+		if (!!r) {
+			const rulesToDelete = new Array();
+			r.forEach((rule) => {
+				rulesToDelete.push(rule.id);
+			});
+			chrome.declarativeNetRequest.updateDynamicRules({
+				removeRuleIds: rulesToDelete,
+				addRules: rules
+			}, () => {
+				if (chrome.runtime.lastError) {
+					console.error("Error updating dynamic rules:", chrome.runtime.lastError);
+				}
+			});
+		}
+	});
+}

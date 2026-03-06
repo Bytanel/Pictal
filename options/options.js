@@ -31,16 +31,12 @@ function addSieve(sieve_name, sieve) {
         <span id="sieve_title" contenteditable="false" title="${sieve_name}">${sieve_name}</span>
         <div>
             <div class="rule_line">
-                <label style="width: 90px">Link Regex:</label>
+                <label style="width: 78px">Link Regex:</label>
                 <pre id="link_regex"></pre>
             </div>
             <div class="rule_line">
-                <label style="width: 90px">Link Filter Javascript:</label>
+                <label style="width: 70px">Link Filter Javascript:</label>
                 <pre id="link_filter_javascript"></pre>
-            </div>
-            <div class="rule_line">
-                <label style="width: 90px">Link Request Javascript:</label>
-                <pre id="link_request_javascript"></pre>
             </div>
             <div class="rule_line">
                 <label style="width: 70px">Link Parse Javascript:</label>
@@ -53,11 +49,11 @@ function addSieve(sieve_name, sieve) {
                 <label>Prioritize "Image" over "Link"</label>
             </div>
             <div class="rule_line">
-                <label style="width: 90px">Image Regex:</label>
+                <label style="width: 93px">Image Regex:</label>
                 <pre id="image_regex"></pre>
             </div>
             <div class="rule_line">
-                <label style="width: 90px">Image Filter Javascript:</label>
+                <label style="width: 82px">Image Filter Javascript:</label>
                 <pre id="image_filter_javascript"></pre>
             </div>
             <div class="rule_line">
@@ -71,7 +67,7 @@ function addSieve(sieve_name, sieve) {
             </div>
             <hr>
             <div class="rule_line">
-                <label style="width: 82px">Notes:</label>
+                <label style="width: 40px">Notes:</label>
                 <textarea id="notes" wrap="soft" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="height: 120px;">${sieve.notes || ""}</textarea>
             </div>
         </div>
@@ -98,7 +94,7 @@ function addSieve(sieve_name, sieve) {
 		observer.observe(editor.container);
 	});
 
-	["link_request_javascript", "link_filter_javascript", "link_parse_javascript", "image_filter_javascript", "image_parse_javascript"].forEach(m => {
+	["link_filter_javascript", "link_parse_javascript", "image_filter_javascript", "image_parse_javascript"].forEach(m => {
 		const editor = ace.edit(sieve_config.querySelector("#" + m));
 		editor.session.setMode("ace/mode/javascript");
 		editor.setOptions({
@@ -107,7 +103,6 @@ function addSieve(sieve_name, sieve) {
 			showPrintMargin: false,
 			wrap: true
 		});
-		if (m == "link_request_javascript") editor.setValue(beautify(sieve.link_request_javascript || ""), -1);
 		if (m == "link_filter_javascript") editor.setValue(beautify(sieve.link_filter_javascript || ""), -1);
 		if (m == "link_parse_javascript") editor.setValue(beautify(sieve.link_parse_javascript || ""), -1);
 		if (m == "image_filter_javascript") editor.setValue(beautify(sieve.image_filter_javascript || ""), -1);
@@ -209,7 +204,6 @@ function getSieves(search = "", sieve = null) {
 		const enabled = !sieve.classList.contains("disabled");
 		const link_regex = ace.edit(sieve.querySelector("#link_regex")).getValue();
 		const link_filter_javascript = ace.edit(sieve.querySelector("#link_filter_javascript")).getValue();
-		const link_request_javascript = ace.edit(sieve.querySelector("#link_request_javascript")).getValue();
 		const link_parse_javascript = ace.edit(sieve.querySelector("#link_parse_javascript")).getValue();
 		const image_regex = ace.edit(sieve.querySelector("#image_regex")).getValue();
 		const image_filter_javascript = ace.edit(sieve.querySelector("#image_filter_javascript")).getValue();
@@ -222,7 +216,6 @@ function getSieves(search = "", sieve = null) {
 			enabled: enabled,
 			link_regex: link_regex.trim(),
 			link_filter_javascript: link_filter_javascript.trim(),
-			link_request_javascript: link_request_javascript.trim(),
 			link_parse_javascript: link_parse_javascript.trim(),
 			image_regex: image_regex.trim(),
 			image_filter_javascript: image_filter_javascript.trim(),
@@ -363,9 +356,9 @@ function setupShortcuts(shortcuts) {
 function sievesFromJSON(json) {
 	document.querySelector("#sieve_container").innerHTML = '';
 	for (const sieve in json) {
-        let enabled = SAVED_SIEVES[sieve]?.enabled;
+		let enabled = SAVED_SIEVES[sieve]?.enabled;
 		SAVED_SIEVES[sieve] = json[sieve];
-        if (enabled) SAVED_SIEVES[sieve].enabled = enabled;
+		if (enabled) SAVED_SIEVES[sieve].enabled = enabled;
 	}
 	for (const sieve in SAVED_SIEVES) {
 		addSieve(sieve, SAVED_SIEVES[sieve]);
@@ -484,15 +477,13 @@ window.addEventListener("load", function() {
 	}
 	document.querySelector("#save_button").onclick = save;
 	document.querySelector("#new_button").onclick = new_sieve;
-    if (chrome.runtime.getManifest().manifest_version == 3) {
-	    document.querySelector("#allow_scripts_message").onclick = function(e) {
-	    	e.preventDefault();
-	    	chrome.permissions.request({
-	    		permissions: ["userScripts"]
-	    	});
-	    }
-	    setTimeout(checkUserScripts, 500);
-    }
+	document.querySelector("#allow_scripts_message").onclick = function(e) {
+		e.preventDefault();
+		chrome.permissions.request({
+			permissions: ["userScripts"]
+		});
+	}
+	setTimeout(checkUserScripts, 500);
 
 	// swap between the different pages
 	document.querySelector("#nav_menu").onclick = function(e) {
@@ -526,7 +517,7 @@ async function checkUserScripts() {
 	try {
 		const scripts = await chrome.userScripts.getScripts();
 		if (scripts?.length > 0) {
-			msg.innerHTML = `Great! \"Pictal\" is ready now.`;
+			msg.innerHTML = `Great! Pictal is ready now.`;
 			msg.style.backgroundColor = "#dcfad7";
 			return;
 		} else {
