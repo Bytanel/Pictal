@@ -10,14 +10,16 @@ Development is primarily focused on Firefox because that is what I use and the p
 <img width="726" height="241" alt="image" src="https://github.com/user-attachments/assets/00b86063-4327-4aae-a386-dee2196be20a" />
 </div>
 
+Icon by [iiiGerardoiii](https://github.com/iiiGerardoiii)
+
 # How Pictal Works
 
 1. On page load, all your sieves, preferences, and shortcuts are loaded. To see any changes to those you will need to refresh the page.
-2. Everytime an element is moused over, it looks for urls in the element, its ancestors, and its cousins.
+2. Everytime an element is moused over, it looks for urls in the element, its ancestors, and its cousins that are roughly the same size and in the same place as the element being moused over.
 3. The gathered urls are compared to the sieves in their alphanumeric order and the first match against a **Link Regex** or **Image Regex** is used.
 4. The selection outline is shown and a timer counts down based on the display delay in the options.
-5. Once the timer hits 0, the loading icon is shown and the url is parsed and processed through the matched section of a sieve and then formatted into an object that Pictal can use.
-6. If the loading icon turns green, it means the returned object passes all the checks and will attempt to display the image/video in the preview. If the loading icon turns red, it means that an error occured or the returned object didn't pass the checks.  
+5. Once the timer hits 0, the loading icon is shown and the url is parsed and processed through the matched sieve and then formatted into an object that Pictal can use.
+6. If the loading icon turns green, it means the returned object passes all the checks and will attempt to display the image/video in the preview. If the loading icon turns red, it means that an error occured while loading the image/video or the returned object didn't pass the checks.  
 
 # Differences Between Pictal and Imagus
 
@@ -33,11 +35,11 @@ Development is primarily focused on Firefox because that is what I use and the p
 
 ## Links
 
-This is for general links that aren't themselves media files and links that may be media files but you want to add captions to.
+This is for general links that aren't themselves media files and links that may be media files but you want to add captions to them.
 
 ### Link Regex
 
-This determines what links you want looked for when hovering your mouse over html elements.
+This determines what links you want looked for when hovering your mouse over HTML elements.
 
 ### Link Filter Javascript
 
@@ -77,11 +79,9 @@ This is where the list of urls you want shown in the preview is created. You hav
 - this.link
 - this.regex
 - this.regex_match
+- this.request(url, method, blob = false)
+    - this async function attempts to run a fetch request in the user script context and then in service worker context to maximize the chances of success; the returned object's properties are `{ status, headers, body }`
 - this.node
-- this.body
-    - the text body from the GET request made to the url from **Link Request Javascript**, is empty if **Link Request Javascript** is empty
-- this.passthrough
-    - in the case of a loop, you may want to carry over information from the previous execution context so use this
 
 #### Expected Return
 
@@ -91,14 +91,6 @@ This is where the list of urls you want shown in the preview is created. You hav
         { url: "https://fxtwitter.com/hylics/status/1531022290456088577.mp4", video: true, filename: "meme.mp4" }
         { url: "https://v.redd.it/cq4ti5ut43jg1/DASHPlaylist.mpd", video: true, videojs: true }
     ]
-
-##### Loopback for making extra requests
-    {
-        loop: "https://old.reddit.com/by_id/t3_vt1nib.json",
-        passthrough: "this is my caption"
-    }
-
-
 
 ## Images
 
@@ -138,7 +130,7 @@ If this field is left blank then the full url is passed to the preview as-is.
 
 This allows you to modify headers if some pages are expecting certain headers. It does the same job as an extension like [Simple Modify Headers](https://github.com/didierfred/SimpleModifyHeaders).
 
-NOTE: The `add` and `modify` actions do the same thing.
+Note: The `add` and `modify` actions do the same thing.
 
 ### Example
     [{

@@ -2,6 +2,7 @@
 <head>
 	<meta charset="UTF-8">
 	<title>:: Pictal ::</title>
+	<link rel="shortcut icon" href="../common/img/icon_64.png">
 	<link rel="stylesheet" href="./options.css">
 	<script src="../lib/ace/ace.js"></script>
 	<script src="../lib/beautify.min.js"></script>
@@ -38,7 +39,7 @@
 		<div class="prow">
 			<label>Display delay (ms)</label>
 			<span>
-				<input name="selection_delay" type="number" step="100" min="0" max="5000" value="500">
+				<input name="selection_delay" type="number" step="100" min="0" max="10000" value="500">
 			</span>
 		</div>
 		<div class="prow">
@@ -48,14 +49,7 @@
 			</span>
 		</div>
 		<div class="prow">
-			<label>Show resolution in caption</label>
-			<span>
-				<input id="show_resolution" name="show_resolution" type="checkbox" style="display: none">
-				<label for="show_resolution" class="checkbox"></label>
-			</span>
-		</div>
-		<div class="prow">
-			<label>Preload 2 images ahead in a gallery</label>
+			<label>Preload 2 images ahead in albums</label>
 			<span>
 				<input id="preload_ahead" name="preload_ahead" type="checkbox" style="display: none">
 				<label for="preload_ahead" class="checkbox"></label>
@@ -91,13 +85,25 @@
 			</span>
 		</div>
 		<div class="prow">
-			<label>Remember your position in galleries</label>
+			<label>Pop-up distance from mouse (px)</label>
 			<span>
-				<input id="keep_cached_gallery_index" name="keep_cached_gallery_index" type="checkbox" style="display: none">
-				<label for="keep_cached_gallery_index" class="checkbox"></label>
+				<input name="distance_from_cursor" type="number" step="1" min="-250" max="250" value="20">
 			</span>
 		</div>
 		<div class="prow">
+			<label>Hide mouse when over pop-up upon idle (ms)</label>
+			<span>
+				<input name="hide_cursor_delay" type="number" step="1" min="0" max="30000" value="1500">
+			</span>
+		</div>
+		<div class="prow">
+			<label>Remember your position in albums</label>
+			<span>
+				<input id="keep_cached_album_index" name="keep_cached_album_index" type="checkbox" style="display: none">
+				<label for="keep_cached_album_index" class="checkbox"></label>
+			</span>
+		</div>
+		<div class="prow" style="height: 21px;">
 			<label for="default_zoom_mode">Default zoom-mode</label>
 			<span>
 				<select id="default_zoom_mode" name="default_zoom_mode">
@@ -121,6 +127,13 @@
 			<span>
 				<input id="show_caption" name="show_caption" type="checkbox" style="display: none">
 				<label for="show_caption" class="checkbox"></label>
+			</span>
+		</div>
+		<div class="prow">
+			<label>Show resolution in caption</label>
+			<span>
+				<input id="show_resolution" name="show_resolution" type="checkbox" style="display: none">
+				<label for="show_resolution" class="checkbox"></label>
 			</span>
 		</div>
 		<div class="prow">
@@ -188,7 +201,7 @@
 			<li><b>Wheel</b> to scroll album:</li>
 			<ul>
 				<li>Outside of the image/media</li>
-				<li>Near (100px) to the borders of the browser window</li>
+				<li>Near (10%) the borders of the browser window</li>
 			</ul>
 		</ul>
 	</section>
@@ -202,7 +215,8 @@
 			<div class="action_buttons">
 				<span id="import_sieves" title="Import sieves">&darr;</span>
 				<span id="update_sieves" title="Update sieves from repository">&dArr;</span>
-				<span id="copy_rules_to_clipboard" title="Copy all sieves to clipboard.">&#x1F4CB;</span>
+				<span id="copy_rules_to_clipboard" title="Copy all sieves to clipboard">&#x1F4CB;</span>
+				<span id="delete_all_rules" title="Delete all sieves">🗑️</span>
 			</div>
 		</div>
 		<div id="sieve_container" class="cf"></div>
@@ -219,7 +233,6 @@
 		<div id="sites_help" style="display: block;">
 			Basic syntax: <b>operator:regex</b>
 			Operators: <b>!</b> (blacklist), <b>~</b> (whitelist).
-			Start a line with a <b>;</b> to make it inactive.
 			
 			On reddit, allow only /r/DataHoarder
 			<code>!:^(?:old\.)?reddit\.com
@@ -228,9 +241,8 @@
 	</section>
 
 	<section id="info-sec">
+		<h3 id="app_version"></h3>
 		<label>Based on <a target="_blank" href="https://github.com/hababr/Imagus-Reborn/">Imagus Reborn</a></label>
-		<br>
-		<br>
     	<div>Check out the Imagus community at <a target="_blank" href="https://www.reddit.com/r/imagus/">r/Imagus</a></div>
     	<div>Source code: <a target="_blank" href="https://github.com/Bytanel/Pictal/">GitHub</a></div>
 		</table>
@@ -238,7 +250,8 @@
 
 	<div id="right_panel">
 		<aside>
-			<b id="app_version">Pictal</b>
+			<a href="https://www.reddit.com/r/imagus/" class="logo" target="_blank"></a>
+			<b style="padding-top: 5px; display: block;">Pictal</b>
 			<hr>
 			<div class="op_buttons">
 				<button id="default_button">Default Settings</button>

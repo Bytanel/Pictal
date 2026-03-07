@@ -13,12 +13,14 @@ const DefaultPreferences = {
 	add_hovered_to_history: false,
 	cyclical_albums: false,
 	loader_offset: 25,
-	keep_cached_gallery_index: true,
+	keep_cached_album_index: true,
 	show_caption: true,
 	wrap_caption: false,
 	caption_position: "top",
 	default_zoom_mode: "auto_fit",
-	always_full_zoom: false
+	always_full_zoom: false,
+	distance_from_cursor: 20,
+	hide_cursor_delay: 1500,
 };
 
 const DefaultShortcuts = {

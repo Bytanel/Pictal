@@ -27,6 +27,8 @@ function addSieve(sieve_name, sieve) {
 	sieve_config.classList.add("sieve");
 	if (!sieve.enabled) sieve_config.classList.add("disabled");
 
+	document.querySelector("#app_version").innerText = `v${chrome.runtime.getManifest().version}`;
+
 	sieve_config.innerHTML = `
         <span id="sieve_title" contenteditable="false" title="${sieve_name}">${sieve_name}</span>
         <div>
@@ -251,7 +253,7 @@ function getSieves(search = "", sieve = null) {
 }
 
 function save() {
-	if (!SAVED_SIEVES) return;
+	if (!SAVED_SIEVES && !DEFAULT_PREFERENCES && !SAVED_SHORTCUTS) return;
 	document.querySelector("#save_button").classList.remove("alert");
 
 	SAVED_SIEVES = getSieves();
@@ -467,7 +469,15 @@ window.addEventListener("load", function() {
 
 	document.querySelector("#copy_rules_to_clipboard").onclick = function() {
 		navigator.clipboard.writeText(JSON.stringify(getSieves(), null, 4));
-		alert("The sieves have been copied to your clipboard.")
+		alert("The sieves have been copied to your clipboard.");
+	}
+
+	document.querySelector("#delete_all_rules").onclick = function() {
+		if (confirm("Are you sure you want to delete ALL your sieves?")) {
+			document.querySelectorAll(".sieve").forEach(el => {
+				el.remove();
+			})
+		}
 	}
 
 	document.querySelector("#default_button").onclick = function() {

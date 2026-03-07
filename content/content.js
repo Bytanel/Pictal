@@ -275,10 +275,9 @@ function loadPictal() {
 		PICTAL.IMG = document.createElement("img");
 		PICTAL.IMG.alt = "";
 		PICTAL.IMG.style.cssText = `
-        	display: none;
-        	width: 100%;
-        	height: 100%;
-        	cursor: zoom-in;
+			display: none;
+			width: 100%;
+			height: 100%;
 		`;
 		PICTAL.IMG.onloadeddata = function(src) {
 			if (PICTAL.State != "loading") return;
@@ -291,7 +290,7 @@ function loadPictal() {
 			fileLoaded();
 			renderFrame();
 		};
-		PICTAL.IMG.addEventListener("load", function(e) {
+		PICTAL.IMG.onload = function(e) {
 			PICTAL.IMG.onloadeddata(e.target.src);
 			HoveredLinks.setAsCached(e.target.src);
 			if (!PICTAL.Preferences["preload_ahead"]) return;
@@ -308,12 +307,11 @@ function loadPictal() {
 					HoveredLinks.setAsCached(file.url);
 				}
 			}
-		}, false);
-		PICTAL.IMG.addEventListener("error", function() {
-			clearInterval(PICTAL.IMGTIMER);
-
+		};
+		PICTAL.IMG.onerror = function() {
+			clearInterval(PICTAL.IMGTimer);
 			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-		}, false);
+		};
 		PICTAL.DIV.appendChild(PICTAL.IMG);
 
 
@@ -359,10 +357,9 @@ function loadPictal() {
 			fileLoaded();
 			renderFrame();
 		};
-		PICTAL.VIDEO.addEventListener("error", function() {
-
+		PICTAL.VIDEO.onerror = function() {
 			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-		}, false);
+		};
 		PICTAL.VIDEO.onvolumechange = function(e) {
 			if (PICTAL.State != "preview") return;
 			if (e.target.localName == "video") {
@@ -502,11 +499,10 @@ function loadPictal() {
 	function fileLoaded() {
 		const file = HoveredLinks.getFile();
 		const gallerySize = HoveredLinks.getFiles().length;
-		const [elHeight, elWidth] = getResolution();
 
 		PICTAL.DIV.style.pointerEvents = PICTAL.Center ? "initial" : "none";
 
-		PICTAL.HEADER.style.display = (gallerySize > 1 || file.caption || PICTAL.Preferences["show_resolution"]) ? "block" : "none";
+		PICTAL.HEADER.style.display = ((gallerySize > 1 || file.caption || PICTAL.Preferences["show_resolution"]) && PICTAL.Rotation % 360 == 0) ? "block" : "none";
 		if (gallerySize > 1) {
 			PICTAL.PAGINATOR.style.display = "initial";
 			PICTAL.PAGINATOR.innerText = `${HoveredLinks.getIndex()+1} / ${gallerySize}`;
@@ -514,6 +510,7 @@ function loadPictal() {
 			PICTAL.PAGINATOR.style.display = "none";
 		}
 		if (PICTAL.Preferences["show_resolution"]) {
+			const [elHeight, elWidth] = getResolution();
 			PICTAL.RESOLUTION.style.display = "initial";
 			PICTAL.RESOLUTION.innerText = `${elWidth}x${elHeight}`;
 			PICTAL.RESOLUTION.style.marginLeft = (gallerySize > 1 ? "4px" : "0px");
@@ -534,7 +531,7 @@ function loadPictal() {
 		if (PICTAL.LastFilePreviewed == file.url) return;
 		PICTAL.LastFilePreviewed = file.url;
 
-		clearInterval(PICTAL.IMGTIMER);
+		clearInterval(PICTAL.IMGTimer);
 		PICTAL.DIV.style.display = "none";
 
 		PICTAL.CenterZoom = 1;
@@ -562,17 +559,20 @@ function loadPictal() {
 		} else {
 			if (HoveredLinks.isCached(file.url)) {
 				PICTAL.IMG.src = file.url;
-				PICTAL.IMG.onloadeddata(file.url);
+				setTimeout(() => { // wait 1 tick for img to load for resolution metadata
+					PICTAL.IMG.onloadeddata(file.url);
+				}, 1);
 			} else {
 				PICTAL.IMG.removeAttribute("src");
 
 				// if you change the src on a loading image then the download gets canceled so use this loader to keep the connection open and finish the download
 				const loader = new Image();
 				loader.src = file.url;
-				PICTAL.IMGTIMER = setInterval(function() { // start displaying the image as it is downloading
-					if (loader.naturalWidth) {
-						clearInterval(PICTAL.IMGTIMER);
-						PICTAL.IMG.src = loader.src;
+
+				PICTAL.IMG.src = file.url;
+				PICTAL.IMGTimer = setInterval(function() { // start displaying the image as it is downloading
+					if (PICTAL.IMG.naturalWidth) {
+						clearInterval(PICTAL.IMGTimer);
 						PICTAL.IMG.onloadeddata(file.url);
 					}
 				}, 25);
@@ -631,7 +631,7 @@ function loadPictal() {
 			if (HoveredLinks.contains(fullURL)) {
 				PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
 				HoveredLinks.set(fullURL);
-				if (!PICTAL.Preferences["keep_cached_gallery_index"]) HoveredLinks.setIndex(0);
+				if (!PICTAL.Preferences["keep_cached_album_index"]) HoveredLinks.setIndex(0);
 				loadPreviewFile();
 				return;
 			}
@@ -801,6 +801,18 @@ function loadPictal() {
 		if (PICTAL.State == "selecting") {
 			setupTimer();
 		}
+		if (PICTAL.State == "preview") {
+			const gallerySize = HoveredLinks.getFiles().length;
+			if (PICTAL.Center && PICTAL.DIV.contains(e.target) && !(isNearSide(e) && gallerySize > 1)) {
+				PICTAL.IMG.style.cursor = "zoom-in";
+				clearTimeout(PICTAL.HideCursorTimer);
+				PICTAL.HideCursorTimer = setTimeout(() => {
+					PICTAL.IMG.style.cursor = "none";
+				}, PICTAL.Preferences["hide_cursor_delay"]);
+			} else {
+				PICTAL.IMG.style.cursor = "initial";
+			}
+		}
 	});
 
 	// select elements to parse and preview
@@ -942,22 +954,12 @@ function loadPictal() {
 		const [elWidth, elHeight] = getResolution();
 
 		// bounds of the page
-		let heightBoundsTop = 0;
-		let heightBoundsBottom = 15;
-		if (PICTAL.Rotation % 360 == 0) {
-			if (PICTAL.Preferences["caption_position"] == "bottom") {
-				heightBoundsTop = 0;
-				heightBoundsBottom = 35;
-			} else {
-				heightBoundsTop = 20;
-				heightBoundsBottom = 10;
-			}
-		}
-		const maxHeight = document.documentElement.clientHeight - heightBoundsTop - heightBoundsBottom;
+		const headerSize = (PICTAL.Rotation % 360 == 0 && PICTAL.HEADER.style.display != "none") ? 25 : 0; // header isn't visible when rotated so don't add extra space
+		const divBorderSize = 12; // image resolution doesn't reflect the size of the div due to the border so account for the space the border takes up
+		const maxHeight = document.documentElement.clientHeight - headerSize - divBorderSize;
+		const maxWidth = document.documentElement.clientWidth - divBorderSize;
 
-		const widthBoundsRight = 15;
-		const maxWidth = document.documentElement.clientWidth - widthBoundsRight;
-
+		const distanceFromCursor = Number(PICTAL.Preferences["distance_from_cursor"]);
 
 		let scale = Math.min(maxWidth / elWidth, maxHeight / elHeight);
 		if (Math.abs(PICTAL.Rotation % 180) != 0) {
@@ -981,27 +983,23 @@ function loadPictal() {
 			if (PICTAL.Rotation % 180 != 0) {
 				let diff = (height - width) / 2;
 
-				if (PICTAL.MouseY < maxHeight / 2) { // top half of page
-					top = top - diff;
-					top = clamp(top, -diff, maxHeight - height + diff + (heightBoundsTop / 2) + heightBoundsBottom);
-				} else { // bottom half of page
-					top = top - height + diff;
-					top = clamp(top, -diff, maxHeight - height + diff);
-				}
+				top = (PICTAL.MouseY < maxHeight / 2) ? top - diff : top - height + diff; // top and bottom half of page
+				top = clamp(top, -diff, maxHeight - height + diff);
 
-				left = (PICTAL.MouseX < maxWidth / 2) ? left + diff : left - width - diff - 20; // left and right half of page
-				left = clamp(left, diff, maxWidth - height + diff - 10);
+				left = (PICTAL.MouseX < maxWidth / 2) ? left + diff : left - width - diff; // left and right half of page
+				left = clamp(left, diff, maxWidth - height + diff);
 			} else {
 				if (PICTAL.MouseX < maxWidth / 2) {
-					left = Math.min(left, maxWidth - width);
+					left = Math.min(left + distanceFromCursor, maxWidth - width);
 				} else {
-					left = Math.max(left - width, 0);
+					left = Math.max(left - width - divBorderSize - distanceFromCursor, 0);
 				}
 
+				const headerSpace = (PICTAL.Preferences["caption_position"] != "bottom") ? headerSize : 0;
 				if (PICTAL.MouseY < maxHeight / 2) {
-					top = Math.min(top, maxHeight - height + heightBoundsTop);
+					top = Math.min(top + distanceFromCursor, maxHeight - height + headerSpace);
 				} else {
-					top = Math.max(top - height, heightBoundsTop);
+					top = Math.max(top - height - distanceFromCursor, headerSpace);
 				}
 			}
 
@@ -1010,7 +1008,7 @@ function loadPictal() {
 			PICTAL.LOADER.style.top = `${PICTAL.MouseY - 50}px`;
 			PICTAL.LOADER.style.left = `${PICTAL.MouseX}px`;
 			if (PICTAL.Preferences["caption_position"] == "bottom") {
-				PICTAL.HEADER.style.top = height + 4 + "px";
+				PICTAL.HEADER.style.top = `${height + 4}px`;
 			} else {
 				PICTAL.HEADER.style.top = "-25px";
 			}
@@ -1040,34 +1038,31 @@ function loadPictal() {
 			PICTAL.LOADER.style.top = `${(maxHeight / 2)}px`;
 			PICTAL.LOADER.style.left = `${(maxWidth / 2)}px`;
 
+			let topSpace = headerSize;
 			if (PICTAL.Preferences["caption_position"] == "bottom") {
-				PICTAL.HEADER.style.top = height + 4 + "px";
+				PICTAL.HEADER.style.top = `${height + 4}px`;
+				topSpace = 0;
 			} else {
 				PICTAL.HEADER.style.top = "-25px";
 			}
 
-			const side_spacing = ((height > maxHeight || width > maxWidth) ? 40 : 0);
-			height += side_spacing;
-			width += side_spacing * 2;
-
+			const edgeSpace = 20; // extra space on all sides when zoomed in
 			if (height > maxHeight) { // vertical zoom pan with mouse
-				PICTAL.DIV.style.top = side_spacing + (-(PICTAL.MouseY / maxHeight) * (height - maxHeight)) + "px";
+				height += edgeSpace * 2;
+				PICTAL.DIV.style.top = topSpace + edgeSpace + (-Math.min(PICTAL.MouseY / maxHeight, 1) * (height - maxHeight)) + "px";
 			} else {
-				PICTAL.DIV.style.top = side_spacing + ((maxHeight - height) / 2) + heightBoundsTop + "px";
+				PICTAL.DIV.style.top = topSpace + ((maxHeight - height) / 2) + "px";
 			}
 
 			if (width > maxWidth) { // horizontal zoom pan with mouse
-				PICTAL.DIV.style.left = side_spacing + (-(PICTAL.MouseX / maxWidth) * (width - maxWidth)) + "px";
+				width += edgeSpace * 2;
+				PICTAL.DIV.style.left = edgeSpace + (-Math.min(PICTAL.MouseX / maxWidth, 1) * (width - maxWidth)) + "px";
 			} else {
-				PICTAL.DIV.style.left = side_spacing + ((maxWidth - width) / 2) + "px";
+				PICTAL.DIV.style.left = ((maxWidth - width) / 2) + "px";
 			}
 		}
 
 		requestAnimationFrame(renderFrame);
-	}
-
-	function hidePreview() {
-
 	}
 
 	// stop everything and reset to initial conditions
@@ -1095,7 +1090,7 @@ function loadPictal() {
 		PICTAL.DIV.style.transform = `rotate(${PICTAL.Rotation}deg)`;
 		PICTAL.IMG.removeAttribute("src");
 		PICTAL.IMG.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
-		clearInterval(PICTAL.IMGTIMER);
+		clearInterval(PICTAL.IMGTimer);
 		PICTAL.VIDEO.pause();
 		PICTAL.VIDEO.removeAttribute("src");
 		PICTAL.VIDEO.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
@@ -1106,13 +1101,14 @@ function loadPictal() {
 	let pauseMouseOut = false;
 	document.addEventListener("mouseout", (e) => {
 		if (PICTAL.State == "idle") return;
+		if (PICTAL.TargetedElement?.contains(e.relatedTarget)) return; // don't move selection to a child element, it'll probably have the same link
 		if (PICTAL.State == "selecting") {
 			reset();
 		}
 		if (PICTAL.State == "loading" && !PICTAL.Center && !PICTAL.Preferences["always_full_zoom"]) {
 			reset();
 		}
-		if (PICTAL.State == "preview" && !PICTAL.Center && !PICTAL.TargetedElement?.contains(e.relatedTarget) && !pauseMouseOut) {
+		if (PICTAL.State == "preview" && !PICTAL.Center && !pauseMouseOut) {
 			reset();
 		}
 	});
@@ -1124,166 +1120,192 @@ function loadPictal() {
 	window.addEventListener("keyup", (e) => {
 		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"]) {
 			PICTAL.isHoldingActivateKey = false;
-			e.preventDefault();
+			stopPropagation(e);
 		}
 	}, {
 		capture: true,
 		passive: false
 	});
 
-	// TODO: rewrite shortcut system
+	function stopPropagation(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		e.stopImmediatePropagation();
+	}
+
 	window.addEventListener("keydown", (e) => {
 		if (e.target.isContentEditable || e.target.localName == "input") return; // if typing in an input, don't use shortcuts
 
 		if (e.key == PICTAL.Preferences["hold_to_activate_trigger"] && !PICTAL.isHoldingActivateKey) {
 			PICTAL.isHoldingActivateKey = true;
-			e.preventDefault();
+			stopPropagation(e);
 			if (PICTAL.Preferences["hold_to_activate"] == "enabled" && PICTAL.State == "selecting" && !PICTAL.HoverTimer) {
 				setupTimer();
 			}
 		}
 
-		if (PICTAL.State == "idle") return;
-		e.preventDefault();
-		e.stopPropagation();
-		e.stopImmediatePropagation();
+		if (!e.ctrlKey && ((e.key == "Escape" && !e.shiftKey) || e.key == PICTAL.Shortcuts.close_preview)) {
+			stopPropagation(e);
+			reset();
+		}
+
+
+		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
+
+		if (!e.ctrlKey && (e.key == PICTAL.Shortcuts.zoom_in || (e.key == "Enter" && !e.shiftKey) || (e.key == "NumpadEnter" && !e.shiftKey))) {
+			stopPropagation(e);
+			PICTAL.Center = !PICTAL.Center;
+			PICTAL.CenterZoom = 1;
+			if (PICTAL.Preferences["always_full_zoom"]) reset();
+			PICTAL.DIV.style.pointerEvents = PICTAL.Center ? "initial" : "none";
+			updateLoader();
+		}
+
+		if (!e.ctrlKey && (e.key == PICTAL.Shortcuts.natural_size || e.key == PICTAL.Shortcuts.auto_fit || e.key == PICTAL.Shortcuts.fit_to_width || e.key == PICTAL.Shortcuts.fit_to_height)) {
+			stopPropagation(e);
+			PICTAL.Center = true;
+			PICTAL.CenterZoom = 1;
+
+			switch (e.key) {
+				case PICTAL.Shortcuts.natural_size:
+					PICTAL.ViewMode = "natural_size";
+					break;
+				case PICTAL.Shortcuts.auto_fit:
+					//PICTAL.CenterZoom = 1;
+					PICTAL.ViewMode = "auto_fit";
+					break;
+				case PICTAL.Shortcuts.fit_to_width:
+					PICTAL.ViewMode = "fit_to_width";
+					break;
+				case PICTAL.Shortcuts.fit_to_height:
+					PICTAL.ViewMode = "fit_to_height";
+					break;
+			}
+
+			PICTAL.DIV.style.pointerEvents = PICTAL.Center ? "initial" : "none";
+			updateLoader();
+		}
+
+
+		if (!e.ctrlKey && e.key == PICTAL.Shortcuts.wrap_caption) {
+			stopPropagation(e);
+			if (PICTAL.HEADER.style.whiteSpace == "nowrap") {
+				PICTAL.HEADER.style.whiteSpace = "pre-line";
+			} else {
+				PICTAL.HEADER.style.whiteSpace = "nowrap";
+			}
+		}
+
+		if (!e.ctrlKey && e.key == PICTAL.Shortcuts.open_options) {
+			stopPropagation(e);
+			chrome.runtime.sendMessage({
+				type: "OpenOptions"
+			});
+		}
+
 
 		const file = HoveredLinks.getFile();
 		const gallerySize = HoveredLinks.getFiles().length;
 
-		if (!e.ctrlKey && !e.shiftKey) {
-			if (e.key == "Escape" || e.key == PICTAL.Shortcuts.close_preview) reset();
-
-			if ((e.key == PICTAL.Shortcuts.zoom_in || e.key == PICTAL.Shortcuts.natural_size || e.key == PICTAL.Shortcuts.auto_fit || e.key == PICTAL.Shortcuts.fit_to_width || e.key == PICTAL.Shortcuts.fit_to_height || e.key == "Enter" || e.key == "NumpadEnter") && (PICTAL.State == "loading" || PICTAL.State == "preview")) {
-				if (e.key != PICTAL.Shortcuts.zoom_in && e.key != "Enter" && e.key != "NumpadEnter") {
-					PICTAL.Center = true;
-					PICTAL.CenterZoom = 1;
-				}
-
-				switch (e.key) {
-					case PICTAL.Shortcuts.natural_size:
-						PICTAL.ViewMode = "natural_size";
-						break;
-					case PICTAL.Shortcuts.auto_fit:
-						PICTAL.CenterZoom = 1;
-						PICTAL.ViewMode = "auto_fit";
-						break;
-					case PICTAL.Shortcuts.fit_to_width:
-						PICTAL.ViewMode = "fit_to_width";
-						break;
-					case PICTAL.Shortcuts.fit_to_height:
-						PICTAL.ViewMode = "fit_to_height";
-						break;
-					default:
-						PICTAL.Center = !PICTAL.Center;
-						PICTAL.CenterZoom = 1;
-						if (PICTAL.Preferences["always_full_zoom"]) reset();
-				}
-
-				PICTAL.DIV.style.pointerEvents = PICTAL.Center ? "initial" : "none";
-				updateLoader();
-			}
-
-			if (PICTAL.State == "preview") {
-				if (e.key == PICTAL.Shortcuts.open_image_in_new_tab) {
-					window.open(file.url, "_blank");
-				}
-
-				if (e.key == PICTAL.Shortcuts.wrap_caption) {
-					if (PICTAL.HEADER.style.whiteSpace == "nowrap") {
-						PICTAL.HEADER.style.whiteSpace = "pre-line";
-					} else {
-						PICTAL.HEADER.style.whiteSpace = "nowrap";
-					}
-				}
-
-				if (e.key == PICTAL.Shortcuts.open_options) {
-					chrome.runtime.sendMessage({
-						type: "OpenOptions"
-					});
-				}
-
-				if (e.key == PICTAL.Shortcuts.add_to_history) {
-					chrome.runtime.sendMessage({
-						type: "AddToHistory",
-						url: file.url
-					});
-				}
-
-				if (e.key == PICTAL.Shortcuts.flip_vertical || e.key == PICTAL.Shortcuts.flip_horizontal) {
-					let i = Number(e.key == PICTAL.Shortcuts.flip_vertical);
-					PICTAL.Scale[i] = -1 * PICTAL.Scale[i];
-					if (file.video) {
-						if (file.videojs) {
-							PICTAL.VIDEOJS.el().style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
-						} else {
-							PICTAL.VIDEO.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
-						}
-					} else {
-						PICTAL.IMG.style.transform = `scale(${PICTAL. Scale[0]}, ${PICTAL.Scale[1]})`;
-					}
-				}
-
-				if (e.key == PICTAL.Shortcuts.rotate_left || e.key == PICTAL.Shortcuts.rotate_right) {
-					PICTAL.Rotation += (e.key == PICTAL.Shortcuts.rotate_right ? 90 : -90);
-					PICTAL.DIV.style.transform = `rotate(${PICTAL.Rotation}deg)`;
-					PICTAL.HEADER.style.display = PICTAL.Rotation % 360 ? "none" : "block";
-				}
-
-				if (gallerySize > 1) {
-					if (e.key == "Home" || e.key == "End") {
-						HoveredLinks.setIndex(e.key == "Home" ? 0 : gallerySize - 1);
-						loadPreviewFile();
-					}
-				}
-
-				if (file.video) {
-					if (e.key == "ArrowUp" || e.key == "ArrowDown") {
-						if (e.key == "ArrowUp") {
-							if (PICTAL.VIDEO.muted) {
-								PICTAL.VIDEO.muted = false;
-								PICTAL.VIDEO.volume = 0;
-								if (file.videojs) PICTAL.VIDEOJS.muted(false);
-							}
-						}
-						PICTAL.VIDEO.volume = clamp(PICTAL.VIDEO.volume + (e.key == "ArrowUp" ? .05 : -.05), 0, 1);
-						if (file.videojs) PICTAL.VIDEOJS.volume(PICTAL.VIDEO.volume);
-					}
-
-					if (e.key == "," || e.key == ".") {
-						let time = (e.key == "." ? 1 : -1) * .04;
-						if (file.videojs) {
-							PICTAL.VIDEOJS.pause();
-							PICTAL.VIDEOJS.currentTime(PICTAL.VIDEOJS.currentTime() + time);
-						} else {
-							PICTAL.VIDEO.pause();
-							PICTAL.VIDEO.currentTime += time;
-						}
-					}
-
-					if (e.key == "m") {
-						PICTAL.VIDEO.muted = !PICTAL.VIDEO.muted;
-						if (file.videojs) PICTAL.VIDEOJS.muted(PICTAL.VIDEO.muted);
-					}
-				}
-			}
-		}
-
 		const step_forward = (e.key == "ArrowRight" || (!e.shiftKey && e.key == " ") || e.key == "PageDown");
 		const step_backward = (e.key == "ArrowLeft" || (e.shiftKey && e.key == " ") || e.key == "PageUp");
-		if ((step_forward || step_backward) && gallerySize > 1) {
-			HoveredLinks.setIndex(clamp(HoveredLinks.getIndex() + ((step_forward ? 1 : -1) * ((e.shiftKey && e.key != " ") ? 5 : 1)), 0, gallerySize - 1));
-			loadPreviewFile();
+		if (!e.ctrlKey && (step_forward || step_backward)) {
+			stopPropagation(e);
+			if (gallerySize > 1) {
+				HoveredLinks.setIndex(clamp(HoveredLinks.getIndex() + ((step_forward ? 1 : -1) * ((e.shiftKey && e.key != " ") ? 5 : 1)), 0, gallerySize - 1));
+				loadPreviewFile();
+			}
 		}
+
 
 		if (PICTAL.State != "preview") return;
 
-		if (e.ctrlKey && e.key == "c") {
+		if (!e.ctrlKey && e.key == PICTAL.Shortcuts.open_image_in_new_tab) {
+			stopPropagation(e);
+			window.open(file.url, "_blank");
+		}
+
+		if (!e.ctrlKey && e.key == PICTAL.Shortcuts.add_to_history) {
+			stopPropagation(e);
+			chrome.runtime.sendMessage({
+				type: "AddToHistory",
+				url: file.url
+			});
+		}
+
+		if (!e.ctrlKey && (e.key == PICTAL.Shortcuts.flip_vertical || e.key == PICTAL.Shortcuts.flip_horizontal)) {
+			stopPropagation(e);
+			let i = Number(e.key == PICTAL.Shortcuts.flip_vertical);
+			PICTAL.Scale[i] = -1 * PICTAL.Scale[i];
+			if (file.video) {
+				if (file.videojs) {
+					PICTAL.VIDEOJS.el().style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
+				} else {
+					PICTAL.VIDEO.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
+				}
+			} else {
+				PICTAL.IMG.style.transform = `scale(${PICTAL. Scale[0]}, ${PICTAL.Scale[1]})`;
+			}
+		}
+
+		if (!e.ctrlKey && (e.key == PICTAL.Shortcuts.rotate_left || e.key == PICTAL.Shortcuts.rotate_right)) {
+			stopPropagation(e);
+			PICTAL.Rotation += (e.key == PICTAL.Shortcuts.rotate_right ? 90 : -90);
+			PICTAL.DIV.style.transform = `rotate(${PICTAL.Rotation}deg)`;
+			fileLoaded();
+		}
+
+		if (gallerySize > 1) {
+			if (!e.ctrlKey && !e.shiftKey && (e.key == "Home" || e.key == "End")) {
+				stopPropagation(e);
+				HoveredLinks.setIndex(e.key == "Home" ? 0 : gallerySize - 1);
+				loadPreviewFile();
+			}
+		}
+
+		if (file.video) {
+			if (!e.ctrlKey && (e.key == "ArrowUp" || e.key == "ArrowDown")) {
+				stopPropagation(e);
+				if (e.key == "ArrowUp") {
+					if (PICTAL.VIDEO.muted) {
+						PICTAL.VIDEO.muted = false;
+						PICTAL.VIDEO.volume = 0;
+						if (file.videojs) PICTAL.VIDEOJS.muted(false);
+					}
+				}
+				PICTAL.VIDEO.volume = clamp(PICTAL.VIDEO.volume + (e.key == "ArrowUp" ? .05 : -.05), 0, 1);
+				if (file.videojs) PICTAL.VIDEOJS.volume(PICTAL.VIDEO.volume);
+			}
+
+			if (!e.ctrlKey && (e.key == "," || e.key == ".")) {
+				stopPropagation(e);
+				let time = (e.key == "." ? 1 : -1) * .04;
+				if (file.videojs) {
+					PICTAL.VIDEOJS.pause();
+					PICTAL.VIDEOJS.currentTime(PICTAL.VIDEOJS.currentTime() + time);
+				} else {
+					PICTAL.VIDEO.pause();
+					PICTAL.VIDEO.currentTime += time;
+				}
+			}
+
+			if (!e.ctrlKey && (e.key == "m")) {
+				stopPropagation(e);
+				PICTAL.VIDEO.muted = !PICTAL.VIDEO.muted;
+				if (file.videojs) PICTAL.VIDEOJS.muted(PICTAL.VIDEO.muted);
+			}
+		}
+
+
+
+		if (!e.shiftKey && e.ctrlKey && e.key == "c") {
+			stopPropagation(e);
 			navigator.clipboard.writeText(file.url);
 		}
 
 		if (!e.shiftKey && file.video) {
 			if (e.key == " " && (gallerySize == 1 || e.ctrlKey)) {
+				stopPropagation(e);
 				PICTAL.VIDEO.paused ? PICTAL.VIDEO.play() : PICTAL.VIDEO.pause();
 				if (file.videojs) PICTAL.VIDEOJS.paused() ? PICTAL.VIDEOJS.play() : PICTAL.VIDEOJS.pause();
 			}
@@ -1291,6 +1313,7 @@ function loadPictal() {
 
 		if (file.video) {
 			if ((e.key == "ArrowLeft" || e.key == "ArrowRight") && (gallerySize == 1 || e.ctrlKey)) {
+				stopPropagation(e);
 				const time = (e.key == "ArrowRight" ? 5 : -5) * (e.shiftKey ? 3 : 1);
 				if (file.videojs) {
 					PICTAL.VIDEOJS.currentTime(PICTAL.VIDEOJS.currentTime() + time);
@@ -1301,6 +1324,7 @@ function loadPictal() {
 		}
 
 		if (!e.ctrlKey && e.shiftKey && e.key == "End" && gallerySize > 1) {
+			stopPropagation(e);
 			pauseMouseOut = true;
 			let search = prompt("Enter the number of the page you want to jump to or to the first page with the caption text you're looking for.", "");
 			setTimeout(() => { // prevent mouseout when execution resumes because the browser thinks you moused away
@@ -1322,6 +1346,7 @@ function loadPictal() {
 		}
 
 		if (!e.ctrlKey && e.shiftKey && e.key == " " && file.video) {
+			stopPropagation(e);
 			if (file.videojs) {
 				PICTAL.VIDEOJS.controls(!PICTAL.VIDEOJS.controls());
 			} else {
@@ -1329,7 +1354,8 @@ function loadPictal() {
 			}
 		}
 
-		if ((e.ctrlKey && e.key == "s") || (!e.ctrlKey && e.key == PICTAL.Shortcuts.save_image)) {
+		if ((e.ctrlKey && !e.shiftKey && e.key == "s") || (!e.ctrlKey && e.key == PICTAL.Shortcuts.save_image)) {
+			stopPropagation(e);
 			let filename = file.filename;
 			if (filename == false) return; // option to prevent downloading certain files
 			if (!filename) {
@@ -1357,25 +1383,32 @@ function loadPictal() {
 
 	document.addEventListener("mousedown", (e) => {
 		if (e.buttons == 1 && ((PICTAL.State == "preview" && !PICTAL.DIV.contains(e.target)) || PICTAL.State == "loading")) {
-			e.preventDefault();
+			stopPropagation(e);
 			reset();
 		}
 	});
 
+	function isNearSide(e) {
+		const horizontalMargin = document.documentElement.clientWidth / 20;
+		const verticalMargin = document.documentElement.clientHeight / 20;
+		const nearSide = (e.clientX < horizontalMargin || e.clientX > (document.documentElement.clientWidth - horizontalMargin) || e.clientY < verticalMargin || e.clientY > (document.documentElement.clientHeight - verticalMargin));
+		return nearSide;
+	}
+
 	document.addEventListener("wheel", (e) => {
 		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
-		if (PICTAL.State == "loading" || PICTAL.Center) e.preventDefault();
+		if (PICTAL.State == "loading" || PICTAL.Center) stopPropagation(e);
 
-		if (PICTAL.Center && (PICTAL.DIV.contains(e.target) || HoveredLinks.getFiles().length == 1)) {
-			e.preventDefault();
+		if (PICTAL.Center && ((PICTAL.DIV.contains(e.target) && !isNearSide(e)) || HoveredLinks.getFiles().length == 1)) {
+			stopPropagation(e);
 			if (e.wheelDelta < 0 && PICTAL.CenterZoom > .1) {
 				PICTAL.CenterZoom *= .75;
 			}
 			if (e.wheelDelta > 0 && PICTAL.CenterZoom < 50) {
 				PICTAL.CenterZoom *= 1 / .75;
 			}
-		} else if ((!PICTAL.Center && HoveredLinks.getFiles().length > 1) || (PICTAL.Center && !PICTAL.DIV.contains(e.target))) {
-			e.preventDefault();
+		} else if ((!PICTAL.Center && HoveredLinks.getFiles().length > 1) || (PICTAL.Center && (!PICTAL.DIV.contains(e.target) || isNearSide(e)))) {
+			stopPropagation(e);
 			if (e.wheelDelta < 0) {
 				HoveredLinks.incrementIndex();
 			}
