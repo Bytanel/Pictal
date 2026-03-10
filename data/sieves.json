@@ -109,6 +109,17 @@
         "link_parse_javascript": "let resp = await this.request(\"GET\", this.protocol + this.link);\n\nlet reg = new RegExp(`(\\\\d+),\"${this.regex_match[1]}`);\nlet m = resp.body.match(reg);\n\nresp = await this.request(\"GET\", this.protocol + 'cached.freeanimehentai.net/api/v8/guest/videos/' + m[1] + '/manifest');\nlet json = JSON.parse(resp.body);\nif (json.errors) return false;\n\nlet stream = json.videos_manifest.servers[0].streams.reduce((max, obj) => obj.score > max.score ? obj : max);\nlet url = stream.url;\nreturn [{\n\turl: url,\n\tvideo: true,\n\tvideojs: true\n}];",
         "modify_headers_json": "[{\n\t\"url_wildcard\": \"https://*hydaelyn*\",\n\t\"action\": \"modify\",\n\t\"apply_on\": \"response\",\n\t\"header_name\": \"Access-Control-Allow-Origin\",\n\t\"header_value\": \"*\"\n}]"
     },
+    "hentaifox.com": {
+        "enabled": true,
+        "link_regex": "^hentaifox\\.com/(?:gallery|g)/(\\d+)(?:/\\d*/?)?",
+        "link_parse_javascript": "let resp = await this.request(\"GET\", this.protocol + 'hentaifox.com/gallery/' + this.regex_match[1]);\nlet data = resp.body.match(/\\$\\.parseJSON\\('(.+)'\\);/)[1];\nlet json = JSON.parse(data);\nconsole.log(json);\n\nlet base_url = resp.body.match(/data-src=\"(.+)\\/\\d*t\\.\\w*\"/)[1];\n\nvar exts = {\n\t'j': 'jpg',\n\t'p': 'png',\n\t'g': 'gif',\n\t'w': 'webp',\n\t'a': 'avif'\n}\n\nlet images = [];\nfor (const img in json) {\n\tlet url = `${base_url}/${img}.${exts[json[img][0]]}`;\n\timages.push({\n\t\turl: url\n\t});\n}\nimages[0].caption = resp.body.match(/<title>(.+) - HentaiFox<\\/title>/)?.[1];\n\nreturn images;"
+    },
+    "hitomi.la": {
+        "enabled": true,
+        "link_regex": "^hitomi\\.la\\/.+?(\\d+)\\.html(?:#\\d*)?",
+        "link_parse_javascript": "let resp = await this.request(\"GET\", this.protocol + 'ltn.gold-usergeneratedcontent.net/galleries/' + this.regex_match[1] + '.js')\n\nlet resp_dir = await this.request(\"GET\", this.protocol + 'ltn.gold-usergeneratedcontent.net/gg.js');\nlet gg = Function(resp_dir.body.replace('gg = ', 'return'))();\n\nlet galleryinfo = Function(resp.body.replace('var galleryinfo = ', 'return '))();\n\nlet images = []\nfor (const f of galleryinfo.files) {\n\tlet m = /(..)(.)$/.exec(f.hash);\n\tlet g = parseInt(m[2] + m[1], 16);\n\tlet path = `${this.protocol}a${1+gg.m(g)}.gold-usergeneratedcontent.net/${gg.b}${g}/${f.hash}.avif`;\n\timages.push({\n\t\turl: path\n\t});\n}\nimages[0].caption = galleryinfo?.japanese_title || galleryinfo.title;\n\nreturn images;",
+        "notes": "gg.js changes regularly so you have to fetch the contents each time"
+    },
     "imdb.com": {
         "enabled": true,
         "image_regex": "^((?:(?:images\\.|(?:images-[a-z]{2}\\.ssl-|(?![gz]-)[^.?]+\\.)images-)amazon|ia\\.media-imdb|m\\.media-amazon)\\.com/images/[^/]/[^.]+(?:(?!\\.[A-Za-z]{3,4}$)\\.[^A-Z_.]+)*)(?:$|(?!_(?:CB|V)\\d{4,}_\\.)[^?]*(\\.[^?]*).*)",
@@ -223,6 +234,13 @@
         "enabled": true,
         "link_regex": "^(safebooru\\.org|xbooru\\.com)/index\\.php\\?page=post&s=view&id=(\\d+)",
         "link_parse_javascript": "let resp = await this.request(\"GET\", this.protocol + this.regex_match[1] + '/index.php?page=dapi&s=post&q=index&id=' + this.regex_match[2]);\n\nlet parser = new DOMParser();\nlet doc = parser.parseFromString(resp.body, 'text/xml');\n\nlet el = doc.firstChild.firstChild;\nlet url = el.getAttribute('file_url');\nlet caption = el.getAttribute('tags');\nlet ext = url.split('.').pop();\n\nreturn [{\n\turl: url,\n\tcaption: caption,\n\tvideo: (ext == 'mp4' || ext == 'webm')\n}];"
+    },
+    "shimmie2": {
+        "enabled": true,
+        "image_regex": "(.+/_thumbs/([a-f0-9]{32})/).+\\.\\w+",
+        "image_parse_javascript": "const mime_table = {\n\t'image/png': '.png',\n\t'image/jpeg': '.jpeg',\n\t'image/gif': '.gif',\n\t'video/mp4': '.mp4',\n\t'video/webm': '.webm'\n}\n\nlet mime = this.node.parentNode.getAttribute('data-mime');\n\nreturn this.protocol + this.regex_match[1].replace('/_thumbs/', '/_images/') + this.regex_match[2] + mime_table[mime];",
+        "prioritize_images": true,
+        "notes": "for websites running shimmie2\nhttps://github.com/shish/shimmie2"
     },
     "store.steampowered.com": {
         "enabled": true,

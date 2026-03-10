@@ -280,7 +280,7 @@ function loadPictal() {
 			height: 100%;
 		`;
 		PICTAL.IMG.onloadeddata = function(src) {
-			if (PICTAL.State != "loading") return;
+			if (PICTAL.State != "loading" || src != HoveredLinks.getFile().url) return;
 
 			PICTAL.LOADER.style.display = "none";
 			PICTAL.DIV.style.display = "initial";
@@ -308,7 +308,8 @@ function loadPictal() {
 				}
 			}
 		};
-		PICTAL.IMG.onerror = function() {
+		PICTAL.IMG.onerror = function(e) {
+			if (e.target.src != HoveredLinks.getFile().url) return;
 			clearInterval(PICTAL.IMGTimer);
 			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 		};
@@ -369,7 +370,7 @@ function loadPictal() {
 				PICTAL.Volume = PICTAL.VIDEOJS.volume();
 				PICTAL.Muted = PICTAL.VIDEOJS.muted();
 			}
-		}
+		};
 		PICTAL.DIV.appendChild(PICTAL.VIDEO);
 
 		PICTAL.HEADER = document.createElement("div");
@@ -510,7 +511,7 @@ function loadPictal() {
 			PICTAL.PAGINATOR.style.display = "none";
 		}
 		if (PICTAL.Preferences["show_resolution"]) {
-			const [elHeight, elWidth] = getResolution();
+			const [elWidth, elHeight] = getResolution();
 			PICTAL.RESOLUTION.style.display = "initial";
 			PICTAL.RESOLUTION.innerText = `${elWidth}x${elHeight}`;
 			PICTAL.RESOLUTION.style.marginLeft = (gallerySize > 1 ? "4px" : "0px");
@@ -529,6 +530,7 @@ function loadPictal() {
 	function loadPreviewFile() {
 		const file = HoveredLinks.getFile();
 		if (PICTAL.LastFilePreviewed == file.url) return;
+		PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
 		PICTAL.LastFilePreviewed = file.url;
 
 		clearInterval(PICTAL.IMGTimer);
@@ -559,9 +561,6 @@ function loadPictal() {
 		} else {
 			if (HoveredLinks.isCached(file.url)) {
 				PICTAL.IMG.src = file.url;
-				setTimeout(() => { // wait 1 tick for img to load for resolution metadata
-					PICTAL.IMG.onloadeddata(file.url);
-				}, 1);
 			} else {
 				PICTAL.IMG.removeAttribute("src");
 
@@ -587,8 +586,6 @@ function loadPictal() {
 			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 			return;
 		}
-
-		PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
 
 		HoveredLinks.add(fullURL, files);
 		HoveredLinks.set(fullURL);
@@ -696,6 +693,12 @@ function loadPictal() {
 						return;
 					}
 
+					if (!request_url) {
+						console.error("[Image Parse Javascript]:", "A string was not returned by Image Parse Javascript.");
+						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
+						return;
+					}
+
 					// construct a url for each # permutation 
 					const match = request_url.match(/#([^#]+)#/);
 					links = match ? match[1].trim().split(/\s+/).map(ext => request_url.replace(match[0], ext)) : [request_url];
@@ -798,7 +801,7 @@ function loadPictal() {
 			updateLoader();
 		}
 
-		if (PICTAL.State == "selecting") {
+		if (PICTAL.State == "selecting" && PICTAL.Preferences["reset_delay_on_mouse_move"]) {
 			setupTimer();
 		}
 		if (PICTAL.State == "preview") {
@@ -823,6 +826,11 @@ function loadPictal() {
 		const target = e.target;
 		if (target == document.documentElement || target == document.body || target == document.header) return;
 		if (target.children.length > 5) return;
+
+
+		// if navigating to another page without moving and the mouse is over an image then mouseover triggers so we need mouse coords
+		PICTAL.MouseX = e.clientX;
+		PICTAL.MouseY = e.clientY;
 
 
 		let elements = new Set();
@@ -1022,15 +1030,13 @@ function loadPictal() {
 			} else if (PICTAL.ViewMode == "fit_to_height") {
 				PICTAL.CenterZoom = (PICTAL.Rotation % 180 == 0) ? (maxHeight / height) : (maxHeight / width);
 				PICTAL.ViewMode = "natural_size";
+			} else if (PICTAL.ViewMode == "auto_fit") {
+				PICTAL.CenterZoom = scale;
+				PICTAL.ViewMode = "natural_size";
 			}
+			height *= PICTAL.CenterZoom;
+			width *= PICTAL.CenterZoom;
 
-			if (PICTAL.ViewMode == "auto_fit") {
-				height *= PICTAL.CenterZoom * scale;
-				width *= PICTAL.CenterZoom * scale;
-			} else if (PICTAL.ViewMode == "natural_size") {
-				height *= PICTAL.CenterZoom;
-				width *= PICTAL.CenterZoom;
-			}
 
 			PICTAL.DIV.style.height = `${height}px`;
 			PICTAL.DIV.style.width = `${width}px`;
@@ -1088,7 +1094,6 @@ function loadPictal() {
 		PICTAL.DIV.style.pointerEvents = "none";
 		PICTAL.DIV.style.display = "none";
 		PICTAL.DIV.style.transform = `rotate(${PICTAL.Rotation}deg)`;
-		PICTAL.IMG.removeAttribute("src");
 		PICTAL.IMG.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
 		clearInterval(PICTAL.IMGTimer);
 		PICTAL.VIDEO.pause();
@@ -1112,6 +1117,11 @@ function loadPictal() {
 			reset();
 		}
 	});
+
+	window.navigation.addEventListener("navigate", (e) => {
+		if (PICTAL.State == "idle") return;
+		reset();
+	})
 
 	document.addEventListener("blur", () => {
 		PICTAL.isHoldingActivateKey = false;
@@ -1171,7 +1181,6 @@ function loadPictal() {
 					PICTAL.ViewMode = "natural_size";
 					break;
 				case PICTAL.Shortcuts.auto_fit:
-					//PICTAL.CenterZoom = 1;
 					PICTAL.ViewMode = "auto_fit";
 					break;
 				case PICTAL.Shortcuts.fit_to_width:
@@ -1182,7 +1191,7 @@ function loadPictal() {
 					break;
 			}
 
-			PICTAL.DIV.style.pointerEvents = PICTAL.Center ? "initial" : "none";
+			PICTAL.DIV.style.pointerEvents = "initial";
 			updateLoader();
 		}
 
@@ -1255,6 +1264,12 @@ function loadPictal() {
 			fileLoaded();
 		}
 
+		if (PICTAL.Center && !e.ctrlKey && (e.key == "-" || e.key == "=")) {
+			stopPropagation(e);
+			if (e.key == "-") previewZoom(false);
+			if (e.key == "=") previewZoom(true);
+		}
+
 		if (gallerySize > 1) {
 			if (!e.ctrlKey && !e.shiftKey && (e.key == "Home" || e.key == "End")) {
 				stopPropagation(e);
@@ -1295,8 +1310,6 @@ function loadPictal() {
 				if (file.videojs) PICTAL.VIDEOJS.muted(PICTAL.VIDEO.muted);
 			}
 		}
-
-
 
 		if (!e.shiftKey && e.ctrlKey && e.key == "c") {
 			stopPropagation(e);
@@ -1395,18 +1408,33 @@ function loadPictal() {
 		return nearSide;
 	}
 
+	function previewZoom(zoom_in) {
+		const [width, height] = getResolution();
+		if (!width || !height) return;
+
+		const maxHeight = document.documentElement.clientHeight;
+		const maxWidth = document.documentElement.clientWidth;
+		const imageRatio = Math.max(width / height, height / width);
+		const scale = Math.min(maxWidth / width, maxHeight / height);
+		const min = scale / 25; // zoom out
+		const max = scale * imageRatio * 25; // zoom in
+
+		if (zoom_in && PICTAL.CenterZoom > min) {
+			PICTAL.CenterZoom *= .75;
+		}
+		if (!zoom_in && PICTAL.CenterZoom < max) {
+			PICTAL.CenterZoom *= 1 / .75;
+		}
+	}
+
 	document.addEventListener("wheel", (e) => {
 		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
 		if (PICTAL.State == "loading" || PICTAL.Center) stopPropagation(e);
 
 		if (PICTAL.Center && ((PICTAL.DIV.contains(e.target) && !isNearSide(e)) || HoveredLinks.getFiles().length == 1)) {
 			stopPropagation(e);
-			if (e.wheelDelta < 0 && PICTAL.CenterZoom > .1) {
-				PICTAL.CenterZoom *= .75;
-			}
-			if (e.wheelDelta > 0 && PICTAL.CenterZoom < 50) {
-				PICTAL.CenterZoom *= 1 / .75;
-			}
+			if (e.wheelDelta < 0) previewZoom(false);
+			if (e.wheelDelta > 0) previewZoom(true);
 		} else if ((!PICTAL.Center && HoveredLinks.getFiles().length > 1) || (PICTAL.Center && (!PICTAL.DIV.contains(e.target) || isNearSide(e)))) {
 			stopPropagation(e);
 			if (e.wheelDelta < 0) {

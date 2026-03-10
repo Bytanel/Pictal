@@ -7,11 +7,11 @@ Fully supported on Chrome and Firefox.
 Development is primarily focused on Firefox because that is what I use and the problems Imagus had on Firefox is what led me to create Pictal in the first place. If there are any issues on Chrome then I may not catch them unless reported.
 
 <div align="center">
-<img width="726" height="241" alt="image" src="https://github.com/user-attachments/assets/00b86063-4327-4aae-a386-dee2196be20a" />
+<img width="726" height="241" src="https://github.com/user-attachments/assets/00b86063-4327-4aae-a386-dee2196be20a"/>
 </div>
+<br>
 
-Icon by [iiiGerardoiii](https://github.com/iiiGerardoiii)
-
+<img width="16" height="16" src="https://raw.githubusercontent.com/Bytanel/Pictal/master/common/img/icon_64.png"/> Icon by [iiiGerardoiii](https://github.com/iiiGerardoiii)
 # How Pictal Works
 
 1. On page load, all your sieves, preferences, and shortcuts are loaded. To see any changes to those you will need to refresh the page.

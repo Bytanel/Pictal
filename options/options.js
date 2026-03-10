@@ -306,7 +306,16 @@ function highlightSaveButton() {
 }
 
 function findKeyConflicts(els) {
-	const keys = {};
+
+	// add hardcoded shortcuts to conflict table
+	const keys = {
+		"m": 1,
+		",": 1,
+		".": 1,
+		"-": 1,
+		"=": 1,
+	};
+
 	els.forEach(inputEl => {
 		if (inputEl.value) {
 			keys[inputEl.value] = (keys[inputEl.value] || 0) + 1;
@@ -477,6 +486,7 @@ window.addEventListener("load", function() {
 			document.querySelectorAll(".sieve").forEach(el => {
 				el.remove();
 			})
+			highlightSaveButton();
 		}
 	}
 
@@ -494,6 +504,8 @@ window.addEventListener("load", function() {
 		});
 	}
 	setTimeout(checkUserScripts, 500);
+
+	document.querySelector("#filters").oninput = highlightSaveButton;
 
 	// swap between the different pages
 	document.querySelector("#nav_menu").onclick = function(e) {

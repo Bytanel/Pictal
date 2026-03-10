@@ -43,16 +43,10 @@
 			</span>
 		</div>
 		<div class="prow">
-			<label>Default media volume (%)</label>
+			<label class="sub_opt">Reset delay on mouse move</label>
 			<span>
-				<input name="video_volume" type="number" step="10" min="0" max="100" value="50">
-			</span>
-		</div>
-		<div class="prow">
-			<label>Preload 2 images ahead in albums</label>
-			<span>
-				<input id="preload_ahead" name="preload_ahead" type="checkbox" style="display: none">
-				<label for="preload_ahead" class="checkbox"></label>
+				<input id="reset_delay_on_mouse_move" name="reset_delay_on_mouse_move" type="checkbox" style="display: none">
+				<label for="reset_delay_on_mouse_move" class="checkbox"></label>
 			</span>
 		</div>
 		<div class="prow tiptop">
@@ -65,10 +59,16 @@
 			</span>
 		</div>
 		<div class="prow">
-			<label>Add hovered links to your browser history</label>
+			<label>Default media volume (%)</label>
 			<span>
-				<input id="add_hovered_to_history" name="add_hovered_to_history" type="checkbox" style="display: none">
-				<label for="add_hovered_to_history" class="checkbox"></label>
+				<input name="video_volume" type="number" step="10" min="0" max="100" value="50">
+			</span>
+		</div>
+		<div class="prow">
+			<label>Preload 2 images ahead in albums</label>
+			<span>
+				<input id="preload_ahead" name="preload_ahead" type="checkbox" style="display: none">
+				<label for="preload_ahead" class="checkbox"></label>
 			</span>
 		</div>
 		<div class="prow">
@@ -76,6 +76,20 @@
 			<span>
 				<input id="cyclical_albums" name="cyclical_albums" type="checkbox" style="display: none">
 				<label for="cyclical_albums" class="checkbox"></label>
+			</span>
+		</div>
+		<div class="prow">
+			<label>Remember your position in albums</label>
+			<span>
+				<input id="keep_cached_album_index" name="keep_cached_album_index" type="checkbox" style="display: none">
+				<label for="keep_cached_album_index" class="checkbox"></label>
+			</span>
+		</div>
+		<div class="prow">
+			<label>Add hovered links to your browser history</label>
+			<span>
+				<input id="add_hovered_to_history" name="add_hovered_to_history" type="checkbox" style="display: none">
+				<label for="add_hovered_to_history" class="checkbox"></label>
 			</span>
 		</div>
 		<div class="prow">
@@ -94,13 +108,6 @@
 			<label>Hide mouse when over pop-up upon idle (ms)</label>
 			<span>
 				<input name="hide_cursor_delay" type="number" step="1" min="0" max="30000" value="1500">
-			</span>
-		</div>
-		<div class="prow">
-			<label>Remember your position in albums</label>
-			<span>
-				<input id="keep_cached_album_index" name="keep_cached_album_index" type="checkbox" style="display: none">
-				<label for="keep_cached_album_index" class="checkbox"></label>
 			</span>
 		</div>
 		<div class="prow" style="height: 21px;">
@@ -163,7 +170,7 @@
 			<li><label><input name="save_image" value="">, <b>Ctrl + S</b> <span>Save pop-up content</span></label></li>
 			<li><label><input name="close_preview" value="">, <b>Esc</b> <span>Hide the pop-up</span></label></li>
 			<li><b>Ctrl + C</b> <label>Copy URL to clipboard</label></li>
-			<li><b>+</b> / <b>-</b> <span>Zoom in / out</span></li>
+			<li><b>=</b> / <b>-</b> <span>Zoom in / out</span></li>
 
 			<li style="list-style-type: none" class="shortcuts">
 				<label><input name="open_options" value=""> <span>Open options</span></label>
@@ -190,7 +197,7 @@
 			<li><b>Left / Right / Wheel</b> (<b>+ Ctrl</b> in album) Backward/forward 5s (+Shift: 15s)</li>
 			<li><b>Up / Down</b> Adjust volume</li>
 			<li><b>, / .</b> Frame-step for video (assumes 25fps)</li>
-			<li><b>M</b> Mute/unmute</li>
+			<li><b>m</b> Mute/unmute</li>
 
 			<li style="list-style-type: none"><h4>Full-Zoom mode</h4></li>
 			<li><b>Wheel</b> to Zoom-in/Zoom-out:</li>

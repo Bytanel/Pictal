@@ -6,6 +6,7 @@ const DefaultPreferences = {
 	hold_to_activate: "disabled",
 	hold_to_activate_trigger: "Control",
 	selection_delay: 500,
+	reset_delay_on_mouse_move: true,
 	video_volume: 50,
 	show_resolution: false,
 	preload_ahead: true,
@@ -13,14 +14,14 @@ const DefaultPreferences = {
 	add_hovered_to_history: false,
 	cyclical_albums: false,
 	loader_offset: 25,
+	distance_from_cursor: 20,
+	hide_cursor_delay: 1500,
 	keep_cached_album_index: true,
 	show_caption: true,
 	wrap_caption: false,
 	caption_position: "top",
 	default_zoom_mode: "auto_fit",
 	always_full_zoom: false,
-	distance_from_cursor: 20,
-	hide_cursor_delay: 1500,
 };
 
 const DefaultShortcuts = {
@@ -164,6 +165,7 @@ function onMessage(message, sender, sendResponse) {
 			}
 		}
 
+		// chrome's implementation of download is different from firefox and experiences problems on certain sites
 		tryURL((platform == "chrome" ? message.url : "")).then(ok => {
 			let url = message.url;
 			if (!ok && platform == "chrome") {
