@@ -61,14 +61,22 @@
 		<div class="prow">
 			<label>Default media volume (%)</label>
 			<span>
-				<input name="video_volume" type="number" step="10" min="0" max="100" value="50">
+				<input name="default_video_volume" type="number" step="10" min="0" max="100" value="50">
 			</span>
 		</div>
 		<div class="prow">
-			<label>Preload 2 images ahead in albums</label>
+			<label>Media muted by default</label>
 			<span>
-				<input id="preload_ahead" name="preload_ahead" type="checkbox" style="display: none">
-				<label for="preload_ahead" class="checkbox"></label>
+				<input id="default_video_muted" name="default_video_muted" type="checkbox" style="display: none">
+				<label for="default_video_muted" class="checkbox"></label>
+			</span>
+		</div>
+		<div class="prow tiptop">
+			<div class="tip">When a previewed image is fully loaded in an album, it look a certain number of files ahead in the album. If those files are images then they get simultaneously preloaded.</div>
+
+			<label>Number of images preloaded ahead in an album</label>
+			<span>
+				<input name="images_preloaded_ahead" type="number" step="1" min="0" max="100" value="2">
 			</span>
 		</div>
 		<div class="prow">
