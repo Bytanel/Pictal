@@ -15,7 +15,7 @@ Development is primarily focused on Firefox because that is what I use and the p
 # How Pictal Works
 
 1. On page load, all your sieves, preferences, and shortcuts are loaded. To see any changes to those you will need to refresh the page.
-2. Everytime an element is moused over, it looks for urls in the element, its ancestors, and its cousins that are roughly the same size and in the same place as the element being moused over.
+2. Everytime an element is moused over, it looks for urls in the element, its ancestors, and its cousins that are roughly the same size and in the same place as the element being moused over. If you hover over the parent of a valid element and that parent also is valid then the parent will be prioritized and you won't be able to hover over the child valid element. This is to minimize the inconvenience of when the preview gets reloaded due to you moving your mouse a little and hovering over a different valid element in the same container.
 3. The gathered urls are compared to the sieves in their alphanumeric order and the first match against a **Link Regex** or **Image Regex** is used.
 4. The selection outline is shown and a timer counts down based on the display delay in the options.
 5. Once the timer hits 0, the loading icon is shown and the url is parsed and processed through the matched sieve and then formatted into an object that Pictal can use.
@@ -85,7 +85,7 @@ This is where the list of urls you want shown in the preview is created. You hav
 
 #### Expected Return
 
-##### Array of tables
+##### Array of objects
     [
         { url: "https://i.redd.it/753dud93zbjg1.png", caption: "tigers" },
         { url: "https://fxtwitter.com/hylics/status/1531022290456088577.mp4", video: true, filename: "meme.mp4" }
@@ -126,7 +126,7 @@ If this field is left blank then the full url is passed to the preview as-is.
     "https://i.4cdn.org/g/1745612666469146.#jpg png mp4 webm gif#"
 
 
-## Modify Headers
+# Modify Headers
 
 This allows you to modify headers if some pages are expecting certain headers. It does the same job as an extension like [Simple Modify Headers](https://github.com/didierfred/SimpleModifyHeaders).
 
@@ -146,3 +146,11 @@ Note: The `add` and `modify` actions do the same thing.
     	"header_name": "Access-Control-Allow-Origin",
     	"header_value": "*"
     }]
+
+# Notes
+
+In general, Chrome offers the best user experience for Pictal.
+
+* Chrome seems to have issues with its download system where it doesn't pass the right headers or cookies or something which leads to issues on certain websites. Pictal sidesteps this by opening a separate tab and downloading the file in it.
+* Chrome's media caching allows for rather seamless browsing with both images and videos whereas on Firefox videos aren't cached as well.
+* Chrome's image decoding is much smoother than Firefox. This is very apparent when dealing with an album of high resolution images.

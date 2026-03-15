@@ -135,7 +135,6 @@ function loadPictal() {
 	// object meant to organize the files and metadata used for the preview
 	class URLCache {
 		parsedLinkCache = {}; // table of album objects from links already parsed by sieves
-		loadedFileList = {}; // list of images that have been fully loaded and are therefore cached by the browser
 		currentURL = null;
 
 		set(url) {
@@ -160,16 +159,6 @@ function loadPictal() {
 		contains(url) {
 			return this.parsedLinkCache[url] != null;
 		}
-
-
-		setAsCached(fileURL) {
-			this.loadedFileList[fileURL] = true;
-		}
-
-		isCached(fileURL) {
-			return this.loadedFileList[fileURL];
-		}
-
 
 		incrementIndex() {
 			let ind = this.parsedLinkCache[this.currentURL].index + 1;
@@ -277,30 +266,18 @@ function loadPictal() {
 			width: 100%;
 			height: 100%;
 		`;
-		PICTAL.IMG.onloadeddata = function(src) {
-			if (PICTAL.State != "loading" || src != HoveredLinks.getFile().url) return;
-
-			PICTAL.IMG.style.display = "initial";
-
-			fileLoaded();
-			updateDIV();
-		};
 		PICTAL.IMG.onload = function(e) {
-			PICTAL.IMG.onloadeddata(e.target.src);
-			HoveredLinks.setAsCached(e.target.src);
+			if (PICTAL.State == "loading" && e.target.src == HoveredLinks.getFile().url) {
+				PICTAL.IMG.style.display = "initial";
+				fileLoaded();
+				updateDIV();
+			}
 
 			for (let i = HoveredLinks.getIndex(); i <= HoveredLinks.getIndex() + Number(PICTAL.Preferences["images_preloaded_ahead"]); i++) {
 				const file = HoveredLinks.getFiles()[i];
 				if (!file) break;
-
-				if (HoveredLinks.isCached(file.url)) continue;
 				if (file.video) continue;
-
-				const loader = new Image();
-				loader.src = file.url;
-				loader.onload = function() {
-					HoveredLinks.setAsCached(file.url);
-				}
+				new Image().src = file.url;
 			}
 		};
 		PICTAL.IMG.onerror = function(e) {
@@ -349,7 +326,7 @@ function loadPictal() {
 			}
 
 			fileLoaded();
-			requestAnimationFrame(updateDIV);
+			updateDIV();
 		};
 		PICTAL.VIDEO.onerror = function(e) {
 			if (e.target.src != HoveredLinks.getFile().url) return;
@@ -475,6 +452,7 @@ function loadPictal() {
 	function getResolution() {
 		let elHeight, elWidth;
 		const file = HoveredLinks.getFile();
+		if (!file) return [null, null];
 
 		if (file.video) {
 			if (file.videojs) {
@@ -494,11 +472,13 @@ function loadPictal() {
 		return [elWidth, elHeight];
 	}
 
-	function fileLoaded() {
+	function fileLoaded(elWidth = null, elHeight = null) {
 		const file = HoveredLinks.getFile();
 		const albumSize = HoveredLinks.getFiles().length;
 
 		clearInterval(PICTAL.LoaderTimer);
+
+		PICTAL.ViewMode = PICTAL.Preferences["default_zoom_mode"];
 
 		PICTAL.State = "preview";
 
@@ -514,7 +494,7 @@ function loadPictal() {
 			PICTAL.PAGINATOR.style.display = "none";
 		}
 		if (PICTAL.Preferences["show_resolution"]) {
-			const [elWidth, elHeight] = getResolution();
+			if (!elWidth)[elWidth, elHeight] = getResolution();
 			PICTAL.RESOLUTION.style.display = "initial";
 			PICTAL.RESOLUTION.innerText = `${elWidth}x${elHeight}`;
 			PICTAL.RESOLUTION.style.marginLeft = (albumSize > 1 ? "4px" : "0px");
@@ -532,25 +512,25 @@ function loadPictal() {
 
 	let LastFilePreviewed = null;
 
-	async function loadPreviewFile() {
+	function loadPreviewFile() {
+		if (PICTAL.State == "idle") return;
 
 		const file = HoveredLinks.getFile();
-		if (LastFilePreviewed == file.url) return;
+		if (file && LastFilePreviewed?.url == file.url) return;
+
+		PICTAL.State = "loading";
 		PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
-		LastFilePreviewed = file.url;
 
 		clearInterval(PICTAL.IMGTimer);
-
-		PICTAL.CenterZoom = 1;
-		PICTAL.ViewMode = PICTAL.Preferences["default_zoom_mode"];
 
 		if (PICTAL.VIDEOJS) PICTAL.VIDEOJS.el().style.display = "none";
 		PICTAL.VIDEOJS?.dispose(); // resetting or changing src is way too slow so just delete and recreate the object
 		PICTAL.VIDEOJS = null;
 
-		PICTAL.State = "loading";
+		if ((LastFilePreviewed?.video && !file.video) || (!LastFilePreviewed?.video && file.video)) PICTAL.DIV.style.display = "none"; // hide white flash from the DIV due to VIDEO and IMG being invisible during changes from video to image and vice versa
+		LastFilePreviewed = file;
 
-		clearInterval(PICTAL.LoaderTimer);
+		// if it takes longer than 100ms to load the next file then hide and show loader
 		PICTAL.LoaderTimer = setTimeout(() => {
 			if (PICTAL.State != "loading") return;
 			PICTAL.DIV.style.display = "none";
@@ -558,7 +538,7 @@ function loadPictal() {
 			PICTAL.VIDEO.style.display = "none";
 			PICTAL.VIDEO.pause();
 			updateLoader();
-		}, 300);
+		}, 100);
 
 		if (file.video) {
 			if (file.videojs) {
@@ -569,36 +549,38 @@ function loadPictal() {
 			} else {
 				PICTAL.VIDEO.src = file.url;
 			}
+
+			PICTAL.DIV.style.display = "none";
+			PICTAL.IMG.style.display = "none";
 		} else {
-			// if you change the src on a loading image then the download gets canceled so use this loader to keep the connection open and finish the download
 			const loader = new Image();
 			loader.src = file.url;
 
-			if (HoveredLinks.isCached(file.url)) {
-				requestAnimationFrame(updateDIV);
-				updateLoader(false);
-			} else {
-				PICTAL.IMG.removeAttribute("src");
-				PICTAL.DIV.style.display = "none";
-				PICTAL.IMG.style.display = "none";
-				updateLoader();
+			clearInterval(PICTAL.IMGTimer);
+			PICTAL.IMGTimer = setInterval(function() { // start displaying the image as it is downloading
+				if (loader.naturalWidth) {
+					clearInterval(PICTAL.IMGTimer);
+					PICTAL.IMG.removeAttribute("src");
+					PICTAL.IMG.src = file.url;
+					PICTAL.IMG.style.display = "initial";
+					fileLoaded(loader.naturalWidth, loader.naturalHeight);
+					updateDIV(loader.naturalWidth, loader.naturalHeight);
+					loader.src = "";
+				}
+			}, 1);
+			loader.onerror = PICTAL.IMG.onerror;
 
-				PICTAL.IMGTimer = setInterval(function() { // start displaying the image as it is downloading
-					if (PICTAL.IMG.naturalWidth) {
-						clearInterval(PICTAL.IMGTimer);
-						PICTAL.IMG.onloadeddata(file.url);
-					}
-				}, 25);
-			}
-			PICTAL.IMG.src = file.url;
+			PICTAL.VIDEO.style.display = "none";
+			PICTAL.VIDEO.pause();
 		}
 	}
 
-	function updateDIV() {
+	function updateDIV(elWidth = null, elHeight = null) {
 		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
 
 		// get actual image resolution
-		const [elWidth, elHeight] = getResolution();
+		if (!elWidth)[elWidth, elHeight] = getResolution();
+		if (!elWidth || !elHeight) return;
 
 		// bounds of the page
 		const headerSize = (PICTAL.Rotation % 360 == 0 && PICTAL.HEADER.style.display != "none") ? 25 : 0; // header isn't visible when rotated so don't add extra space
@@ -613,7 +595,6 @@ function loadPictal() {
 			scale = Math.min(maxHeight / elWidth, maxWidth / elHeight);
 		}
 		scale = Math.min(scale, 1); // don't exceed original resolution
-
 
 		// this is all a giant mess that was figured out through trial and error lol
 		if (!PICTAL.Center) {
@@ -663,20 +644,22 @@ function loadPictal() {
 
 			if (PICTAL.ViewMode == "fit_to_width") {
 				PICTAL.CenterZoom = (PICTAL.Rotation % 180 == 0) ? (maxWidth / width) : (maxWidth / height);
-				PICTAL.ViewMode = "natural_size";
+				PICTAL.ViewMode = "";
 			} else if (PICTAL.ViewMode == "fit_to_height") {
 				PICTAL.CenterZoom = (PICTAL.Rotation % 180 == 0) ? (maxHeight / height) : (maxHeight / width);
-				PICTAL.ViewMode = "natural_size";
+				PICTAL.ViewMode = "";
 			} else if (PICTAL.ViewMode == "auto_fit") {
 				PICTAL.CenterZoom = scale;
-				PICTAL.ViewMode = "natural_size";
+				PICTAL.ViewMode = "";
+			} else if (PICTAL.ViewMode == "natural_size") {
+				PICTAL.CenterZoom = 1;
+				PICTAL.ViewMode = "";
 			}
 			height *= PICTAL.CenterZoom;
 			width *= PICTAL.CenterZoom;
 
 			height = Math.floor(height);
 			width = Math.floor(width);
-
 
 			PICTAL.DIV.style.height = `${height}px`;
 			PICTAL.DIV.style.width = `${width}px`;
@@ -690,18 +673,34 @@ function loadPictal() {
 			}
 
 			const edgeSpace = 20; // extra space on all sides when zoomed in
-			if (height > maxHeight) { // vertical zoom pan with mouse
-				height += edgeSpace * 2;
-				PICTAL.DIV.style.top = topSpace + edgeSpace + (-Math.min(PICTAL.MouseY / maxHeight, 1) * (height - maxHeight)) + "px";
-			} else {
-				PICTAL.DIV.style.top = topSpace + ((maxHeight - height) / 2) + "px";
-			}
+			if (PICTAL.Rotation % 180 != 0) {
+				const diff = (height - width) / 2;
+				if (width > maxHeight) { // vertical zoom pan with mouse
+					height += edgeSpace * 2;
+					PICTAL.DIV.style.top = edgeSpace + (Math.min(PICTAL.MouseY / maxHeight, 1) * (maxHeight - height + 2 * diff) - diff) + "px";
+				} else {
+					PICTAL.DIV.style.top = topSpace + ((maxHeight - height) / 2) + "px";
+				}
 
-			if (width > maxWidth) { // horizontal zoom pan with mouse
-				width += edgeSpace * 2;
-				PICTAL.DIV.style.left = edgeSpace + (-Math.min(PICTAL.MouseX / maxWidth, 1) * (width - maxWidth)) + "px";
+				if (height > maxWidth) { // horizontal zoom pan with mouse
+					PICTAL.DIV.style.left = edgeSpace + (Math.min(PICTAL.MouseX / maxWidth, 1) * (maxWidth - height) + diff) + "px";
+				} else {
+					PICTAL.DIV.style.left = ((maxWidth - width) / 2) + "px";
+				}
 			} else {
-				PICTAL.DIV.style.left = ((maxWidth - width) / 2) + "px";
+				if (height > maxHeight) { // vertical zoom pan with mouse
+					height += edgeSpace * 2;
+					PICTAL.DIV.style.top = topSpace + edgeSpace + (-Math.min(PICTAL.MouseY / maxHeight, 1) * (height - maxHeight)) + "px";
+				} else {
+					PICTAL.DIV.style.top = topSpace + ((maxHeight - height) / 2) + "px";
+				}
+
+				if (width > maxWidth) { // horizontal zoom pan with mouse
+					width += edgeSpace * 2;
+					PICTAL.DIV.style.left = edgeSpace + (-Math.min(PICTAL.MouseX / maxWidth, 1) * (width - maxWidth)) + "px";
+				} else {
+					PICTAL.DIV.style.left = ((maxWidth - width) / 2) + "px";
+				}
 			}
 		}
 	}
@@ -738,18 +737,6 @@ function loadPictal() {
 		PICTAL.VIDEOJS = null;
 	}
 
-	function handleFiles(fullURL, files) {
-		if (!files?.length) {
-			console.error("[Files Object Check]", "The returned array is empty.");
-			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-			return;
-		}
-
-		HoveredLinks.add(fullURL, files);
-		HoveredLinks.set(fullURL);
-		loadPreviewFile();
-	}
-
 	let hoverArgs = [];
 
 	function setupTimer(sieve = null, target = null, targetURL = null) {
@@ -774,6 +761,19 @@ function loadPictal() {
 		let delay = PICTAL.Preferences["selection_delay"];
 		if (PICTAL.Preferences["instantly_show_cached"] && HoveredLinks.contains(fullURL)) {
 			delay = 0;
+		}
+
+		function handleFiles(url, files) {
+			if (!files?.length) {
+				console.error("[Files Object Check]", "The returned array is empty.");
+				PICTAL.LOADER.style.backgroundColor = COLORS.RED;
+				return;
+			}
+
+			HoveredLinks.add(url, files);
+			if (target != PICTAL.TargetedElement) return;
+			HoveredLinks.set(url);
+			loadPreviewFile(HoveredLinks.getFile());
 		}
 
 		// on timeout, start handling the link and loading the preview media
@@ -1076,7 +1076,6 @@ function loadPictal() {
 		targetURL[1] = targetURL[1] || ""; // "data:" urls don't have a protocol
 
 
-
 		if (targetURL) {
 			PICTAL.TargetedElement = target;
 			PICTAL.TargetedElement.title = ""; // hide tooltips that would interfere with the preview window
@@ -1167,7 +1166,6 @@ function loadPictal() {
 		if (!e.ctrlKey && (e.key == PICTAL.Shortcuts.zoom_in || (e.key == "Enter" && !e.shiftKey) || (e.key == "NumpadEnter" && !e.shiftKey))) {
 			stopPropagation(e);
 			PICTAL.Center = !PICTAL.Center;
-			PICTAL.CenterZoom = 1;
 			PICTAL.ViewMode = PICTAL.Preferences["default_zoom_mode"];
 			if (PICTAL.Preferences["always_full_zoom"]) reset();
 			PICTAL.DIV.style.pointerEvents = PICTAL.Center ? "initial" : "none";
@@ -1178,7 +1176,6 @@ function loadPictal() {
 		if (!e.ctrlKey && (e.key == PICTAL.Shortcuts.natural_size || e.key == PICTAL.Shortcuts.auto_fit || e.key == PICTAL.Shortcuts.fit_to_width || e.key == PICTAL.Shortcuts.fit_to_height)) {
 			stopPropagation(e);
 			PICTAL.Center = true;
-			PICTAL.CenterZoom = 1;
 
 			switch (e.key) {
 				case PICTAL.Shortcuts.natural_size:
@@ -1267,6 +1264,7 @@ function loadPictal() {
 			PICTAL.Rotation += (e.key == PICTAL.Shortcuts.rotate_right ? 90 : -90);
 			PICTAL.DIV.style.transform = `rotate(${PICTAL.Rotation}deg)`;
 			fileLoaded();
+			updateDIV();
 		}
 
 		if (PICTAL.Center && !e.ctrlKey && (e.key == "-" || e.key == "=")) {

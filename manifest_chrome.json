@@ -1,11 +1,11 @@
 {
 	"manifest_version": 3,
 	"name": "Pictal",
-	"version": "2026.3.3",
+	"version": "2026.3.15",
 	"description": "Enlarge and preview images and videos from links.",
 	"homepage_url": "https://github.com/Bytanel/Pictal",
 	"action": {
-		"default_title": "Pictal v2026.3.3"
+		"default_title": "Pictal v2026.3.15"
 	},
 	"icons": {
 		"64": "common/img/icon_64.png"
