@@ -22,7 +22,7 @@ function beautify(value) {
 	});
 }
 
-function addSieve(sieve_name, sieve) {
+function createSieveElement(sieve_name, sieve) {
 	const sieve_config = document.createElement("div");
 	sieve_config.classList.add("sieve");
 	if (!sieve.enabled) sieve_config.classList.add("disabled");
@@ -164,10 +164,11 @@ function addSieve(sieve_name, sieve) {
 	sieve_config.querySelector("#toggle").onclick = function() {
 		sieve_config.classList.toggle("disabled");
 		highlightSaveButton();
+		updateSieveCounter();
 	}
 
 	sieve_config.querySelector("#copy").onclick = function() {
-		navigator.clipboard.writeText(JSON.stringify(getSieves("", [sieve_config]), null, 4));
+		navigator.clipboard.writeText(JSON.stringify(getSievesFromElements("", [sieve_config]), null, 4));
 		alert("The sieve has been copied to your clipboard.")
 	}
 
@@ -193,7 +194,7 @@ var SAVED_SIEVES = {};
 var DEFAULT_PREFERENCES = {};
 var DEFAULT_SHORTCUTS = {};
 
-function getSieves(search = "", sieve = null) {
+function getSievesFromElements(search = "", sieve = null) {
 	const sieves = sieve || document.querySelectorAll(".sieve");
 
 	let regular_sieves = {};
@@ -256,7 +257,7 @@ function save() {
 	if (!SAVED_SIEVES && !DEFAULT_PREFERENCES && !SAVED_SHORTCUTS) return;
 	document.querySelector("#save_button").classList.remove("alert");
 
-	SAVED_SIEVES = getSieves();
+	SAVED_SIEVES = getSievesFromElements();
 
 	chrome.storage.local.set({
 		sieves: SAVED_SIEVES
@@ -295,14 +296,21 @@ function save() {
 	});
 }
 
-function new_sieve() {
+function newSieve() {
 	const sieve_name = "new sieve " + Date.now();
 	SAVED_SIEVES[sieve_name] = {}
-	addSieve(sieve_name, SAVED_SIEVES[sieve_name]);
+	createSieveElement(sieve_name, SAVED_SIEVES[sieve_name]);
 }
 
 function highlightSaveButton() {
 	document.querySelector("#save_button").classList.add("alert");
+}
+
+function updateSieveCounter() {
+	const sieves = document.querySelector("#sieve_container").children;
+	const total = Object.values(sieves).filter(s => s.style.display != "none").length;
+	const active = Object.values(sieves).filter(s => !s.classList.contains("disabled") && s.style.display != "none").length;
+	document.querySelector("#sieve_count").innerText = `${total} (${active})`;
 }
 
 function findKeyConflicts(els) {
@@ -355,10 +363,34 @@ function setupShortcuts(shortcuts) {
 		}
 
 		// handle shortcut inputs on shortcut page
-		el.addEventListener("input", function(e) {
-			el.value = e.data;
+		el.addEventListener("keydown", function(e) {
+			let key = "";
+			switch (e.key) {
+				case "Enter":
+				case "Shift":
+				case "Control":
+				case "Alt":
+				case "PageUp":
+				case "PageDown":
+				case "End":
+				case "Home":
+				case "ArrowLeft":
+				case "ArrowRight":
+				case "ArrowUp":
+				case "ArrowDown":
+				case "Escape":
+				case " ":
+					key = "";
+					break;
+				default:
+					key = e.key;
+					break;
+			}
+
+			el.value = key;
 			highlightSaveButton();
 			findKeyConflicts(els);
+			e.preventDefault();
 		});
 	});
 	findKeyConflicts(els);
@@ -372,7 +404,7 @@ function sievesFromJSON(json) {
 		if (enabled) SAVED_SIEVES[sieve].enabled = enabled;
 	}
 	for (const sieve in SAVED_SIEVES) {
-		addSieve(sieve, SAVED_SIEVES[sieve]);
+		createSieveElement(sieve, SAVED_SIEVES[sieve]);
 	}
 }
 
@@ -396,9 +428,10 @@ window.addEventListener("load", function() {
 		type: "GetSieves"
 	}, (response) => {
 		for (const sieve in response.sieves) {
-			addSieve(sieve, response.sieves[sieve]);
+			createSieveElement(sieve, response.sieves[sieve]);
 		}
 		SAVED_SIEVES = response.sieves;
+		updateSieveCounter();
 	});
 
 	// load preferences
@@ -434,7 +467,8 @@ window.addEventListener("load", function() {
 	}
 	document.querySelector("#sieve_search").value = "";
 	document.querySelector("#sieve_search").oninput = function(e) {
-		const sieves = getSieves(e.target.value);
+		const sieves = getSievesFromElements(e.target.value);
+
 		if (e.target.value) {
 			document.querySelector(".clear_search").style.visibility = "visible";
 		} else {
@@ -447,6 +481,8 @@ window.addEventListener("load", function() {
 				el.style.display = "none";
 			}
 		});
+
+		updateSieveCounter();
 	}
 
 	document.querySelector("#import_sieves").onclick = function() {
@@ -477,7 +513,7 @@ window.addEventListener("load", function() {
 	}
 
 	document.querySelector("#copy_rules_to_clipboard").onclick = function() {
-		navigator.clipboard.writeText(JSON.stringify(getSieves(), null, 4));
+		navigator.clipboard.writeText(JSON.stringify(getSievesFromElements(), null, 4));
 		alert("The sieves have been copied to your clipboard.");
 	}
 
@@ -496,7 +532,7 @@ window.addEventListener("load", function() {
 		highlightSaveButton();
 	}
 	document.querySelector("#save_button").onclick = save;
-	document.querySelector("#new_button").onclick = new_sieve;
+	document.querySelector("#new_button").onclick = newSieve;
 	document.querySelector("#allow_scripts_message").onclick = function(e) {
 		e.preventDefault();
 		chrome.permissions.request({

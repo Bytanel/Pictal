@@ -1133,6 +1133,8 @@ function loadPictal() {
 			PICTAL.isHoldingActivateKey = false;
 			stopPropagation(e);
 		}
+
+		if (PICTAL.State == "preview" && e.key == "Alt") stopPropagation(e); // stop annoying alt window bar menu
 	}, {
 		capture: true,
 		passive: false
@@ -1435,12 +1437,12 @@ function loadPictal() {
 		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
 		if (PICTAL.State == "loading" || PICTAL.Center) stopPropagation(e);
 
-		if (PICTAL.Center && ((PICTAL.DIV.contains(e.target) && !isNearSide(e)) || HoveredLinks.getFiles().length == 1)) {
+		if (PICTAL.Center && ((PICTAL.DIV.contains(e.target) && !isNearSide(e)) || HoveredLinks.getFiles().length == 1 || e.altKey) && !e.shiftKey) {
 			stopPropagation(e);
 			if (e.wheelDelta < 0) previewZoom(false);
 			if (e.wheelDelta > 0) previewZoom(true);
 			updateDIV();
-		} else if ((!PICTAL.Center && HoveredLinks.getFiles().length > 1) || (PICTAL.Center && (!PICTAL.DIV.contains(e.target) || isNearSide(e)))) {
+		} else if (HoveredLinks.getFiles().length > 1 && (!PICTAL.Center || (PICTAL.Center && (!PICTAL.DIV.contains(e.target) || isNearSide(e))) || e.shiftKey)) {
 			stopPropagation(e);
 			if (e.wheelDelta < 0) {
 				HoveredLinks.incrementIndex();

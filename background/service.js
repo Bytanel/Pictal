@@ -237,6 +237,12 @@ async function registerContentScripts() {
 	}, ]);
 }
 
+chrome.action.onClicked.addListener(() => {
+	chrome.tabs.create({
+		url: "options/options.html"
+	});
+});
+
 chrome.runtime.onMessage?.addListener(onMessage);
 
 chrome.runtime.onUserScriptMessage?.addListener(onMessage);

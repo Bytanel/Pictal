@@ -450,7 +450,7 @@ h3 {
 .shortcuts input,
 .sub_shortcuts input {
     text-align: center;
-    width: 35px;
+    width: 75px;
 }
 .sub_shortcuts li {
     line-height: 200%;

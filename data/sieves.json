@@ -55,7 +55,7 @@
     "derpibooru.org": {
         "enabled": true,
         "link_regex": "^(derpiboo(?:ru\\.org|\\.ru)|(?:trixiebooru|furbooru)\\.org)/(?:images/)?(\\d+)[^.]*",
-        "link_parse_javascript": "let resp = await this.request(\"GET\", this.protocol + this.link.replace(this.regex, '$1/api/v1/json/images/$2'));\nlet json = JSON.parse(resp.body).image;\n\nlet ext = json.mime_type.split('/')[1];\n\nreturn [{\n\turl: json.representations.full,\n\tcaption: json.description,\n\tvideo: (ext == 'mp4' || ext == 'webm')\n}];",
+        "link_parse_javascript": "let resp = await this.request(\"GET\", this.protocol + this.regex_match[1] + '/api/v1/json/images/' + this.regex_match[2]);\nlet json = JSON.parse(resp.body).image;\n\nlet ext = json.mime_type.split('/')[1];\n\nreturn [{\n\turl: json.representations.full,\n\tcaption: json.description,\n\tvideo: (ext == 'mp4' || ext == 'webm')\n}];",
         "image_regex": "^((?:derpicdn\\.net|furrycdn\\.org)/img/)(?:view/)?(20\\d\\d/1?\\d/[123]?\\d/\\d+)[^?]*\\.([^?]*)$",
         "image_parse_javascript": "let $ = this.regex_match;\nreturn this.protocol + $[1] + 'view/' + $[2] + '.' + $[3];"
     },
