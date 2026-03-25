@@ -239,10 +239,9 @@ function loadPictal() {
 	}
 
 	function createPreviewElements() {
-		if (PICTAL.DIV) return;
+		if (PICTAL.DIV?.parentNode) return;
 
 		PICTAL.DIV = document.createElement("div");
-		document.documentElement.appendChild(PICTAL.DIV);
 		PICTAL.DIV.style.cssText = `
 			position: fixed !important;
 			display: none;
@@ -258,6 +257,7 @@ function loadPictal() {
 			inset: 0;
 			pointer-events: none;
 		`;
+		document.documentElement.appendChild(PICTAL.DIV);
 
 		PICTAL.IMG = document.createElement("img");
 		PICTAL.IMG.alt = "";
@@ -385,38 +385,48 @@ function loadPictal() {
 		PICTAL.HEADER.appendChild(PICTAL.CAPTION);
 	}
 
-	PICTAL.OUTLINE = document.createElement("div");
-	PICTAL.OUTLINE.style.cssText = `
-		position: fixed;
-		box-sizing: content-box;
-		outline: red dashed 1.5px;
-		z-index: 2147483645;
-		opacity: 0;
-		padding: 0;
-		margin: 0;
-		pointer-events: none;
-	`;
-	document.documentElement.appendChild(PICTAL.OUTLINE);
+	function createOutline() {
+		if (PICTAL.OUTLINE?.parentNode) return;
 
-	PICTAL.LOADER = document.createElement("img");
-	PICTAL.LOADER.style.cssText = `
-		position: fixed !important;
-		display: none;
-		padding: 5px;
-		border-radius: 50% !important;
-		box-shadow: 0px 0px 5px 1px #a6a6a6 !important;
-		background-color: rgb(255, 255, 255);
-		background-clip: padding-box;
-		z-index: 2147483647;
-		width: 28px;
-		height: 28px;
-		inset: 0;
-		margin: 0;
-		pointer-events: none;
-		box-sizing: initial;
-	`;
-	PICTAL.LOADER.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOng9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWluWU1pbiBub25lIj48Zz48cGF0aCBpZD0icCIgZD0iTTMzIDQyYTEgMSAwIDAgMSA1NS0yMCAzNiAzNiAwIDAgMC01NSAyMCIvPjx1c2UgeDpocmVmPSIjcCIgdHJhbnNmb3JtPSJyb3RhdGUoNzIgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgxNDQgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgyMTYgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgyODggNTAgNTApIi8+PGFuaW1hdGVUcmFuc2Zvcm0gYXR0cmlidXRlTmFtZT0idHJhbnNmb3JtIiB0eXBlPSJyb3RhdGUiIHZhbHVlcz0iMzYwIDUwIDUwOzAgNTAgNTAiIGR1cj0iMS44cyIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48L2c+PC9zdmc+";
-	document.documentElement.appendChild(PICTAL.LOADER);
+		PICTAL.OUTLINE = document.createElement("div");
+		PICTAL.OUTLINE.style.cssText = `
+			position: fixed;
+			box-sizing: content-box;
+			outline: red dashed 1.5px;
+			z-index: 2147483645;
+			opacity: 0;
+			padding: 0;
+			margin: 0;
+			pointer-events: none;
+		`;
+		document.documentElement.appendChild(PICTAL.OUTLINE);
+	}
+	createOutline();
+
+	function createLoader() {
+		if (PICTAL.LOADER?.parentNode) return;
+
+		PICTAL.LOADER = document.createElement("img");
+		PICTAL.LOADER.style.cssText = `
+			position: fixed !important;
+			display: none;
+			padding: 5px;
+			border-radius: 50% !important;
+			box-shadow: 0px 0px 5px 1px #a6a6a6 !important;
+			background-color: rgb(255, 255, 255);
+			background-clip: padding-box;
+			z-index: 2147483647;
+			width: 28px;
+			height: 28px;
+			inset: 0;
+			margin: 0;
+			pointer-events: none;
+			box-sizing: initial;
+		`;
+		PICTAL.LOADER.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOng9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJ4TWluWU1pbiBub25lIj48Zz48cGF0aCBpZD0icCIgZD0iTTMzIDQyYTEgMSAwIDAgMSA1NS0yMCAzNiAzNiAwIDAgMC01NSAyMCIvPjx1c2UgeDpocmVmPSIjcCIgdHJhbnNmb3JtPSJyb3RhdGUoNzIgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgxNDQgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgyMTYgNTAgNTApIi8+PHVzZSB4OmhyZWY9IiNwIiB0cmFuc2Zvcm09InJvdGF0ZSgyODggNTAgNTApIi8+PGFuaW1hdGVUcmFuc2Zvcm0gYXR0cmlidXRlTmFtZT0idHJhbnNmb3JtIiB0eXBlPSJyb3RhdGUiIHZhbHVlcz0iMzYwIDUwIDUwOzAgNTAgNTAiIGR1cj0iMS44cyIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48L2c+PC9zdmc+";
+		document.documentElement.appendChild(PICTAL.LOADER);
+	}
+	createLoader();
 
 	function updateLoader(show = true) {
 		if (PICTAL.State != "loading") return;
@@ -1077,6 +1087,8 @@ function loadPictal() {
 
 
 		if (targetURL) {
+			createOutline();
+			createLoader();
 			PICTAL.TargetedElement = target;
 			PICTAL.TargetedElement.title = ""; // hide tooltips that would interfere with the preview window
 			PICTAL.LOADER.style.backgroundColor = COLORS.WHITE;
@@ -1401,7 +1413,13 @@ function loadPictal() {
 	});
 
 	document.addEventListener("mousedown", (e) => {
-		if (e.buttons == 1 && ((PICTAL.State == "preview" && !PICTAL.DIV.contains(e.target)) || PICTAL.State == "loading")) {
+		if (e.buttons == 1 && (PICTAL.State == "preview" && (!PICTAL.DIV.contains(e.target) || PICTAL.Preferences["click_to_close"]) || PICTAL.State == "loading")) {
+			const file = HoveredLinks.getFile();
+			if (file?.video && PICTAL.DIV.contains(e.target)) {
+				if (e.target.localName != "video") return;
+				if (!file.videojs && PICTAL.VIDEO.paused) return;
+				if (file.videojs && PICTAL.VIDEOJS.paused()) return;
+			}
 			stopPropagation(e);
 			reset();
 		}

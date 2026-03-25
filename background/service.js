@@ -23,6 +23,7 @@ const DefaultPreferences = {
 	caption_position: "top",
 	default_zoom_mode: "auto_fit",
 	always_full_zoom: false,
+	click_to_close: true,
 };
 
 const DefaultShortcuts = {
