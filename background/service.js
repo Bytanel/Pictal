@@ -18,12 +18,13 @@ const DefaultPreferences = {
 	distance_from_cursor: 20,
 	hide_cursor_delay: 1500,
 	keep_cached_album_index: true,
+	click_to_close: true,
+	select_biggest_element: true,
 	show_caption: true,
 	wrap_caption: false,
 	caption_position: "top",
 	default_zoom_mode: "auto_fit",
 	always_full_zoom: false,
-	click_to_close: true,
 };
 
 const DefaultShortcuts = {
@@ -238,11 +239,107 @@ async function registerContentScripts() {
 	}, ]);
 }
 
-chrome.action.onClicked.addListener(() => {
-	chrome.tabs.create({
-		url: "options/options.html"
+
+
+const protocolRegex = new RegExp(/^(?:(https?:\/\/(?:www\.)?))?(.*)$/i);
+
+function isBlacklisted(filters, _url) {
+	const [, , url] = _url.match(protocolRegex);
+	let blacklisted = false;
+	for (const f of filters.split("\n")) {
+		const line = f.trim();
+		if (line[1] != ":") continue;
+
+		const regex = new RegExp(line.substr(2), "i");
+		const matches = regex.test(url);
+		if (!matches) continue;
+
+		if (line[0] == "~") {
+			blacklisted = false;
+			break;
+		}
+		if (line[0] == "!") {
+			blacklisted = true;
+		}
+	}
+	return blacklisted;
+}
+
+function updateIcon(tabID, tabURL) {
+	if (!tabURL) return;
+	chrome.storage.local.get("filters").then(result => {
+		const filters = result?.filters || "";
+		if (isBlacklisted(filters, tabURL)) {
+			chrome.action.setBadgeText({
+				text: "X",
+				tabId: tabID
+			});
+			chrome.action.setBadgeBackgroundColor({
+				color: "#ff8080ff",
+				tabId: tabID
+			});
+			chrome.action.setBadgeTextColor({
+				color: "#FFF",
+				tabId: tabID
+			});
+		} else {
+			chrome.action.setBadgeText({
+				text: "",
+				tabId: tabID
+			});
+		}
+	});
+}
+
+function createBlacklistRegex(_url) {
+	_url = new URL(_url).origin;
+	let [, , url] = _url.match(protocolRegex);
+	url = `!:^${url}`.replace(".", "\\.");
+	return url;
+}
+
+chrome.action.onClicked.addListener((tab) => {
+	if (tab.url.includes("moz-extension://") || tab.url.includes("chrome-extension://")) return;
+	chrome.storage.local.get("filters").then(result => {
+		const filters = result?.filters || "";
+		let filterArray = filters.split("\n");
+
+		const blacklistRegex = createBlacklistRegex(tab.url);
+
+		// if blacklisted and doesn't match generated blacklist regex then it's custom
+		if (!filterArray.includes(blacklistRegex) && isBlacklisted(filters, tab.url)) {
+			chrome.tabs.create({
+				url: "options/options.html#sites"
+			});
+			return;
+		}
+
+		if (filterArray.includes(blacklistRegex)) {
+			filterArray.splice(filterArray.indexOf(blacklistRegex), 1);
+		} else {
+			filterArray.push(blacklistRegex);
+		}
+
+		chrome.storage.local.set({
+			filters: filterArray.join("\n")
+		});
+
+		updateIcon(tab.id, tab.url);
 	});
 });
+
+// update badge on tab update
+chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
+	if (!tab.active) return;
+	updateIcon(tabId, tab.url);
+});
+
+// update badge on tab activation
+chrome.tabs.onActivated.addListener(async function(info) {
+	updateIcon(info.tabId, (await chrome.tabs.get(info.tabId)).url);
+});
+
+
 
 chrome.runtime.onMessage?.addListener(onMessage);
 
@@ -328,3 +425,6 @@ function addModifyHeaderRules(sieves) {
 		}
 	});
 }
+
+// keep service worker alive otherwise button stops working in chrome
+setInterval(chrome.runtime.getPlatformInfo, 25000);

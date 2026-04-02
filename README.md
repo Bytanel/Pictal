@@ -23,6 +23,7 @@ Development is primarily focused on Firefox because that is what I use and the p
 
 # Differences Between Pictal and Imagus
 
+* Aside from most of the options page, Pictal has been written entirely from scratch. It isn't using the same code as Imagus or its forks.
 * There isn't feature parity with Imagus (yet). A lot of preferences, some shortcuts, and sieve settings are missing although if there is demand for those features then they could be added.
 * There is included a system to modify headers like Simple Modify Headers.
 * There is native VideoJS support for HLS and MPD streams, an extension system is unneeded.

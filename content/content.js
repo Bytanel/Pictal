@@ -5,7 +5,7 @@ const protocolRegex = new RegExp(/^(?:(https?:\/\/(?:www\.)?))?(.*)$/i);
 chrome.runtime.sendMessage({
 	type: "GetSiteFilters"
 }, (response) => {
-	let [, protocol, url] = window.location.href.match(protocolRegex);
+	let [, , url] = window.location.href.match(protocolRegex);
 
 	// site filters
 	let blacklisted = false;
@@ -354,7 +354,6 @@ function loadPictal() {
 			background: rgba(0, 0, 0, 0.75) !important;
 			border-radius: 3px;
 			white-space: ${PICTAL.Preferences["wrap_caption"] || "nowrap"};
-			top: -25px;
 			color: rgb(255, 255, 255) !important;
 			font: 13px/1.4em "Trebuchet MS", sans-serif;
 		`;
@@ -646,7 +645,7 @@ function loadPictal() {
 			if (PICTAL.Preferences["caption_position"] == "bottom") {
 				PICTAL.HEADER.style.top = `${height + 4}px`;
 			} else {
-				PICTAL.HEADER.style.top = "-25px";
+				PICTAL.HEADER.style.top = "-26px";
 			}
 		} else {
 			let height = elHeight;
@@ -679,7 +678,7 @@ function loadPictal() {
 				PICTAL.HEADER.style.top = `${height + 4}px`;
 				topSpace = 0;
 			} else {
-				PICTAL.HEADER.style.top = "-25px";
+				PICTAL.HEADER.style.top = "-26px";
 			}
 
 			const edgeSpace = 20; // extra space on all sides when zoomed in
@@ -776,6 +775,18 @@ function loadPictal() {
 		function handleFiles(url, files) {
 			if (!files?.length) {
 				console.error("[Files Object Check]", "The returned array is empty.");
+				PICTAL.LOADER.style.backgroundColor = COLORS.RED;
+				return;
+			}
+
+			if (new Set(files.map(x => x.url)).size != files.length) {
+				console.error("[Files Object Check]", "The returned array contains duplicate urls.");
+				PICTAL.LOADER.style.backgroundColor = COLORS.RED;
+				return;
+			}
+
+			if (files.find(x => !x.url)) {
+				console.error("[Files Object Check]", "The returned array contains an empty url.");
 				PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 				return;
 			}
@@ -986,12 +997,23 @@ function loadPictal() {
 		}
 	});
 
+	function getAncestors(el, size) {
+		const ancestors = [];
+		while (el && ancestors.length < size) {
+			if (el != document && el.localName != "html" && el.localName != "header" && el.localName != "body") {
+				ancestors.push(el);
+			}
+			el = el.parentNode;
+		}
+		return ancestors;
+	}
+
 	// select elements to parse and preview
 	document.addEventListener("mouseover", (e) => {
 		if (PICTAL.Preferences && PICTAL.Preferences["hold_to_activate"] == "disabled" && PICTAL.isHoldingActivateKey) return;
 		if (PICTAL.TargetedElement || PICTAL.State != "idle") return;
 
-		const target = e.target;
+		let target = e.target;
 		if (target == document.documentElement || target == document.body || target == document.header) return;
 		if (target.children.length > 5) return;
 
@@ -1000,104 +1022,138 @@ function loadPictal() {
 		PICTAL.MouseX = e.clientX;
 		PICTAL.MouseY = e.clientY;
 
-		let elements = new Set();
-
-		// find closest elements in ancestors
-		elements.add(target.closest("a"));
-		elements.add(target.closest("img"));
-		elements.add(target.closest("video"));
-		elements.add(target.closest("article"));
-		elements.add(target.closest("source"));
-
-		Object.values(target.children).forEach((el) => {
-			if (el.localName == "source") elements.add(el);
-		});
-
-		let parent = target;
-		const targetRects = target.getClientRects()[0];
-		if (!targetRects) return;
-
-		for (let i = 0; i < 5; i++) {
-			if (parent == document.body) break;
-
-			let imgEls = parent.getElementsByTagName("img");
-			if (imgEls.length > 1) {
-				imgEls = [imgEls[0], imgEls[imgEls.length - 1]]; // just check first and last elements
-			}
-
-			for (const el of imgEls) {
-				if (elements.has(el)) continue;
-				if (!el.offsetWidth || !el.offsetHeight) continue; // if invisible
-				const elRects = el.getClientRects()[0];
-
-				// the image you're looking for is usually the size and location of whatever container you've got selected even if it's a cousin of the selected element
-				if (Math.abs(elRects.x - targetRects.x) > 5 || Math.abs(elRects.y - targetRects.y) > 5) continue;
-				if (Math.abs(elRects.width - targetRects.width) > 20 || Math.abs(elRects.height - targetRects.height) > 20) continue;
-
-				elements.add(el);
-			};
-
-			parent = parent.parentNode;
-		}
-		if (elements.size == 1 && elements.has(null)) return;
-
-		// look for urls in all element candidates
-		const urls = new Set();
-		elements.forEach(el => {
-			if (!el) return;
-			if (el.href && !el.href.startsWith("javascript:")) urls.add(el.href);
-			if (el.src && !el.src.startsWith("blob:")) urls.add(el.src);
-			if (el.srcset) urls.add(el.srcset.split(",")[0]); // steam pfps
-			if (el.hasAttribute("data-file-url")) urls.add(el.getAttribute("data-file-url"));
-			if (el.hasAttribute("data-source")) urls.add(el.getAttribute("data-source"));
-		});
-		if (urls.size == 1 && urls.has(null)) return;
-
-
-		// look for link regex and image regex matches and use the first match
+		// get 5 closest ancestors to the target element
 		let targetSieve = null;
 		let targetURL = null;
-		for (const s in PICTAL.Sieves) {
-			let sieve = PICTAL.Sieves[s];
-			if (!sieve.enabled) continue;
+		for (const tgt of getAncestors(target, PICTAL.Preferences["select_biggest_element"] ? 5 : 1)) {
 
-			if (sieve.prioritize_images) {
-				if (sieve.image_regex) {
-					targetURL = checkSieveURLs(urls, "image", sieve.image_regex, sieve.image_filter_javascript, target);
+			const targetRects = tgt.getClientRects()[0];
+			if (!targetRects) continue;
+			if (!targetRects.width || !targetRects.height) continue;
+
+			let elements = new Set();
+
+			// find closest elements in ancestors
+			elements.add(tgt.closest("a"));
+			elements.add(tgt.closest("img"));
+			elements.add(tgt.closest("video"));
+			elements.add(tgt.closest("article"));
+			elements.add(tgt.closest("source"));
+
+			Object.values(tgt.children).forEach((el) => {
+				if (el.localName == "source") elements.add(el);
+			});
+
+
+			let parent = tgt;
+
+			for (let i = 0; i < 5; i++) {
+				if (parent == document.body) break;
+
+				// add cousin imgs that are the same size and in the same location of the target element
+				let imgEls = parent.getElementsByTagName("img");
+				if (imgEls.length > 1) {
+					imgEls = [imgEls[0], imgEls[imgEls.length - 1]]; // just check first and last elements
 				}
-				if (!targetURL && sieve.link_regex) {
-					targetURL = checkSieveURLs(urls, "link", sieve.link_regex, sieve.link_filter_javascript, target);
+
+				for (const el of imgEls) {
+					if (elements.has(el)) continue;
+					if (!el.offsetWidth || !el.offsetHeight) continue; // if invisible
+					const elRects = el.getClientRects()[0];
+
+					if (Math.abs(elRects.x - targetRects.x) > 5 || Math.abs(elRects.y - targetRects.y) > 5) continue;
+					if (Math.abs(elRects.width - targetRects.width) > 20 || Math.abs(elRects.height - targetRects.height) > 20) continue;
+
+					elements.add(el);
+				};
+
+				parent = parent.parentNode;
+			}
+			if (elements.size == 1 && elements.has(null)) continue;
+
+
+			// look for urls in all element candidates
+			const urls = new Set();
+			elements.forEach(el => {
+				if (!el) return;
+				if (el.href && !el.href.startsWith("javascript:")) urls.add(el.href);
+				if (el.src && !el.src.startsWith("blob:")) urls.add(el.src);
+				if (el.srcset) {
+					let biggestURL;
+					let biggestSize = 0;
+					el.srcset.split(",").forEach(src => {
+						let [url, size] = src.trim().split(" ");
+						if (!size) {
+							if (!biggestURL) biggestURL = url;
+							return;
+						}
+						let value = parseFloat(size);
+						if (value > biggestSize) {
+							biggestURL = url;
+							biggestSize = value;
+						}
+					});
+					if (biggestURL) urls.add(biggestURL);
 				}
-			} else {
-				if (sieve.link_regex) {
-					targetURL = checkSieveURLs(urls, "link", sieve.link_regex, sieve.link_filter_javascript, target);
+				if (el.hasAttribute("data-file-url")) urls.add(el.getAttribute("data-file-url"));
+				if (el.hasAttribute("data-source")) urls.add(el.getAttribute("data-source"));
+			});
+			if (urls.size == 1 && urls.has(null)) continue;
+
+
+			// look for link regex and image regex matches and use the first match
+			let tgtURL = null;
+			for (const s in PICTAL.Sieves) {
+				let sieve = PICTAL.Sieves[s];
+				if (!sieve.enabled) continue;
+
+				if (sieve.prioritize_images) {
+					if (sieve.image_regex) {
+						tgtURL = checkSieveURLs(urls, "image", sieve.image_regex, sieve.image_filter_javascript, tgt);
+					}
+					if (!tgtURL && sieve.link_regex) {
+						tgtURL = checkSieveURLs(urls, "link", sieve.link_regex, sieve.link_filter_javascript, tgt);
+					}
+				} else {
+					if (sieve.link_regex) {
+						tgtURL = checkSieveURLs(urls, "link", sieve.link_regex, sieve.link_filter_javascript, tgt);
+					}
+					if (!tgtURL && sieve.image_regex) {
+						tgtURL = checkSieveURLs(urls, "image", sieve.image_regex, sieve.image_filter_javascript, tgt);
+					}
 				}
-				if (!targetURL && sieve.image_regex) {
-					targetURL = checkSieveURLs(urls, "image", sieve.image_regex, sieve.image_filter_javascript, target);
+
+				if (tgtURL) {
+					if (!targetSieve) targetSieve = sieve;
+					break;
 				}
 			}
 
-			if (targetURL) {
-				targetSieve = sieve;
-				break;
+			// get the highest up element that has the same target url as the deepest element's target url
+			// this is so the largest container is used instead of swapping between several valid elements in a container
+			if (tgtURL) {
+				if (!targetURL) targetURL = tgtURL;
+				if (tgtURL[2] == targetURL[2]) {
+					target = tgt;
+
+					// hide tooltips that would interfere with the preview window
+					target.title = "";
+					target.setAttribute("data-hover-text", "");
+				}
 			}
 		}
 		if (!targetURL) return;
 		targetURL[1] = targetURL[1] || ""; // "data:" urls don't have a protocol
 
+		createOutline();
+		createLoader();
+		PICTAL.TargetedElement = target;
+		PICTAL.LOADER.style.backgroundColor = COLORS.WHITE;
+		PICTAL.State = "selecting";
 
-		if (targetURL) {
-			createOutline();
-			createLoader();
-			PICTAL.TargetedElement = target;
-			PICTAL.TargetedElement.title = ""; // hide tooltips that would interfere with the preview window
-			PICTAL.LOADER.style.backgroundColor = COLORS.WHITE;
-			PICTAL.State = "selecting";
+		updateOutline();
 
-			updateOutline();
-
-			setupTimer(targetSieve, target, targetURL);
-		}
+		setupTimer(targetSieve, target, targetURL);
 	});
 
 	function updateOutline() {
