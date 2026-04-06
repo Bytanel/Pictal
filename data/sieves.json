@@ -80,7 +80,7 @@
     "ebay": {
         "enabled": true,
         "link_regex": "^(ebay\\.com/itm/\\d+)",
-        "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + this.regex_match[1]);\nconst parser = new DOMParser();\nconst doc = parser.parseFromString(resp.body, 'text/html');\n\nconst imgs = [];\nconst images = [];\nfor (const img of doc.querySelectorAll('img[alt^=\"Picture \"]')) {\n    const url = (img.getAttribute('data-zoom-src') || img.src).replace(/s\\-l\\d+\\./,'s-l9999.');\n    if (url && !imgs.includes(url)) {\n        imgs.push(url);\n        images.push({\n            url: url\n        });\n    }\n}\nif (images) images[0].caption = doc.querySelector('.x-item-title__mainTitle').firstElementChild.innerText;\n\nreturn images;"
+        "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + this.regex_match[1]);\nconst parser = new DOMParser();\nconst doc = parser.parseFromString(resp.body, 'text/html');\n\nconst imgs = new Set();\nconst images = [];\nfor (const img of doc.querySelectorAll('img[alt^=\"Picture \"]')) {\n\tconst url = (img.getAttribute('data-zoom-src') || img.src).replace(/s\\-l\\d+\\./, 's-l9999.');\n\tif (url && !imgs.has(url)) {\n\t\timgs.add(url);\n\t\timages.push({\n\t\t\turl: url\n\t\t});\n\t}\n}\nif (images) images[0].caption = doc.querySelector('.x-item-title__mainTitle').firstElementChild.innerText;\n\nreturn images;"
     },
     "fandom.com": {
         "enabled": true,
@@ -130,6 +130,12 @@
         "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + 'ltn.gold-usergeneratedcontent.net/galleries/' + this.regex_match[1] + '.js')\n\nconst resp_dir = await this.request(\"GET\", this.protocol + 'ltn.gold-usergeneratedcontent.net/gg.js');\nconst gg = Function(resp_dir.body.replace('gg = ', 'return'))();\n\nconst galleryinfo = Function(resp.body.replace('var galleryinfo = ', 'return '))();\n\nconst images = []\nfor (const f of galleryinfo.files) {\n\tconst m = /(..)(.)$/.exec(f.hash);\n\tconst g = parseInt(m[2] + m[1], 16);\n\tconst path = `${this.protocol}a${1+gg.m(g)}.gold-usergeneratedcontent.net/${gg.b}${g}/${f.hash}.avif`;\n\timages.push({\n\t\turl: path\n\t});\n}\nimages[0].caption = galleryinfo?.japanese_title || galleryinfo.title;\n\nreturn images;",
         "notes": "gg.js changes regularly so you have to fetch the contents each time"
     },
+    "imagebam.com": {
+        "enabled": true,
+        "link_regex": "^(?:thumbs\\d\\.)?(imagebam\\.com)/(?:(view/|image/)|\\w\\w/\\w\\w/\\w\\w/)?(\\w+)",
+        "link_parse_javascript": "const $ = this.regex_match;\nconst resp = await this.request(\"GET\", 'https://' + $[1] + '/' + ($[2] || 'view/') + $[3]);\nconst parser = new DOMParser();\nconst doc = parser.parseFromString(resp.body, 'text/html');\n\nreturn [{\n    url: doc.querySelector('.main-image').src\n}];",
+        "modify_headers_json": "[{\n\t\"url_wildcard\": \"https://*imagebam.com/*\",\n\t\"action\": \"add\",\n\t\"apply_on\": \"response\",\n\t\"header_name\": \"Access-Control-Allow-Origin\",\n\t\"header_value\": \"*\"\n}, {\n\t\"url_wildcard\": \"https://*imagebam.com/*\",\n\t\"action\": \"modify\",\n\t\"apply_on\": \"request\",\n\t\"header_name\": \"Cookie\",\n\t\"header_value\": \"sfw_inter=1;nsfw_inter=1\"\n}]"
+    },
     "imdb.com": {
         "enabled": true,
         "image_regex": "^((?:(?:images\\.|(?:images-[a-z]{2}\\.ssl-|(?![gz]-)[^.?]+\\.)images-)amazon|ia\\.media-imdb|m\\.media-amazon)\\.com/images/[^/]/[^.]+(?:(?!\\.[A-Za-z]{3,4}$)\\.[^A-Z_.]+)*)(?:$|(?!_(?:CB|V)\\d{4,}_\\.)[^?]*(\\.[^?]*).*)",
@@ -168,11 +174,11 @@
         "link_regex": "^javdb\\.com/v/\\w{6}$",
         "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + this.link);\nconst parser = new DOMParser();\nconst doc = parser.parseFromString(resp.body, 'text/html');\n\nconst images = [];\nfor (const a of doc.querySelector('.tile-images.preview-images').children) {\n\tif (a.localName == 'video') {\n\t\timages.push({\n\t\t\turl: a.children[0].src,\n\t\t\tvideo: true,\n\t\t\tvideojs: true\n\t\t});\n\t}\n\tif (a.classList.contains('preview-video-container')) {\n\t\timages.push({\n\t\t\turl: a.querySelector('img').src\n\t\t});\n\t}\n\tif (a.classList.contains('tile-item')) {\n\t\timages.push({\n\t\t\turl: a.href\n\t\t});\n\t}\n}\n\nif (images.length) images[0].caption = doc.querySelector('title').innerText.split('|')[0].trim();\n\nreturn images;"
     },
-    "kemono|coomer|nekohouse": {
+    "kemono|coomer": {
         "enabled": true,
-        "link_regex": "^((?:kemono|coomer|nekohouse)\\.(?:cr|s[tu]))/([^/]+/user/[^/]+/post/[\\w-]+).*",
-        "link_parse_javascript": "const api = this.protocol + this.regex_match[1] + '/api/v1/' + this.regex_match[2];\n\nconst resp = new XMLHttpRequest();\nresp.open(\"GET\", api, false);\nresp.setRequestHeader('accept', 'text/css');\nresp.send();\nconst json = JSON.parse(resp.responseText);\n\nconst att = json.post.attachments;\nconst images = [];\nfor (const a in att) {\n\tif (/(7z|bin|docx?|pdf|rar|txt|zip|psd)$/.test(att[a].path)) continue;\n\timages.push({\n\t\turl: this.protocol + this.regex_match[1] + att[a].path,\n\t\tvideo: /(mp4|webm)$/.test(att[a].path)\n\t});\n}\nif (images.length) images[0].caption = json.post.title;\nreturn images;",
-        "image_regex": "^(?:(img|n\\d)\\.)?((?:coomer|kemono|nekohouse)\\.(?:cr|s[tu]))/(?:thumbnail|data)/(.+)",
+        "link_regex": "^((?:kemono|coomer)\\.(?:cr|s[tu]))/([^/]+/user/[^/]+/post/[\\w-]+).*",
+        "link_parse_javascript": "const api = this.protocol + this.regex_match[1] + '/api/v1/' + this.regex_match[2];\n\nconst resp = new XMLHttpRequest();\nresp.open(\"GET\", api, false);\nresp.setRequestHeader('accept', 'text/css');\nresp.send();\nconst json = JSON.parse(resp.responseText);\n\nconst imgs = new Set();\nconst images = [];\nif (json.post.file.path) {\n\tconst url = this.protocol + this.regex_match[1] + json.post.file.path\n\timages.push({\n\t\turl: url,\n\t\tvideo: /(mp4|webm)$/.test(json.post.file.path),\n\t\tfilename: json.post.file.name\n\t});\n\timgs.add(url);\n}\n\nfor (const att of json.post.attachments) {\n\tif (/(7z|bin|docx?|pdf|rar|txt|zip|psd)$/.test(att.path)) continue;\n\n\tconst url = this.protocol + this.regex_match[1] + att.path;\n\tif (imgs.has(url)) continue;\n\n\timages.push({\n\t\turl: url,\n\t\tvideo: /(mp4|webm|m4v)$/.test(att.path),\n\t\tfilename: att.name\n\t});\n\timgs.add(url);\n}\nif (images.length) images[0].caption = json.post.title;\n\nreturn images;",
+        "image_regex": "^(?:(img|n\\d)\\.)?((?:kemono|coomer)\\.(?:cr|s[tu]))/(?:thumbnail|data)/(.+)",
         "image_parse_javascript": "if (this.regex_match[1] == 'img') return this.protocol + this.regex_match[2] + '/' + this.regex_match[3];\nreturn this.protocol + this.link;"
     },
     "kick.com": {
@@ -181,6 +187,14 @@
         "link_parse_javascript": "var url;\nif (this.regex_match[2] == 'videos') {\n\turl = 'kick.com/api/v1/video/' + this.regex_match[3];\n} else if (this.regex_match[2] == 'clips') {\n\turl = 'kick.com/api/v2/clips/' + this.regex_match[3];\n} else {\n\turl = 'kick.com/api/v2/channels/' + this.regex_match[1] + '/info';\n}\n\nconst resp = await this.request(\"GET\", this.protocol + url);\nconst json = JSON.parse(resp.body);\n\nif (json.clip) {\n\tvar url = json.clip.video_url;\n\tvar caption = json.clip.title;\n} else {\n\tvar url = json.source || json.playback_url;\n\tvar caption = json.livestream.session_title;\n}\n\nreturn [{\n\turl: url,\n\tcaption: caption,\n\tvideo: true,\n\tvideojs: true\n}];",
         "image_regex": "^(images\\.kick\\.com/video_thumbnails/\\w+/\\w+/)",
         "image_parse_javascript": "return this.protocol + this.regex_match[1] + '1080.webp';"
+    },
+    "nekohouse": {
+        "enabled": true,
+        "link_regex": "^(nekohouse\\.(?:cr|s[tu]))/[^/]+/user/[^/]+/post/[\\w-]+.*",
+        "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + this.link);\nconst parser = new DOMParser();\nconst doc = parser.parseFromString(resp.body, 'text/html');\n\nconst imgs = new Set();\nconst images = [];\nfor (const img of doc.querySelectorAll('.fileThumb')) {\n\tconst url = this.protocol + this.regex_match[1] + img.getAttribute('href');\n\timages.push({\n\t\turl: url\n\t});\n\timgs.add(url);\n}\n\nfor (const vid of doc.querySelectorAll('.post__video source')) {\n\timages.push({\n\t\turl: vid.src,\n\t\tvideo: true\n\t});\n\timgs.add(vid.src);\n}\n\nfor (const file of doc.querySelectorAll('.scrape__attachment-link')) {\n\tconst url = file.href;\n\tif (imgs.has(url)) continue;\n\tif (/(7z|bin|docx?|pdf|rar|txt|zip|psd)$/.test(url)) continue;\n\timages.push({\n\t\turl: url,\n\t\tvideo: /(mp4|m4v|webm)$/.test(url),\n\t\tfilename: file.getAttribute('download')\n\t});\n}\nif (images.length) images[0].caption = doc.querySelector('.scrape__title').innerText;\n\nreturn images;",
+        "image_regex": "^(?:(img|n\\d)\\.)?(nekohouse\\.(?:cr|s[tu]))/(?:thumbnail|data)/(.+)",
+        "image_parse_javascript": "if (this.regex_match[1] == 'img') return this.protocol + this.regex_match[2] + '/' + this.regex_match[3];\nreturn this.protocol + this.link;",
+        "notes": "why can't nekohouse use an api like kemono"
     },
     "newgrounds.com": {
         "enabled": true,
@@ -286,7 +300,7 @@
     "webmshare.com": {
         "enabled": true,
         "link_regex": "^(?:s\\d\\.)?(webmshare\\.com/(?:play/)?\\w{5})",
-        "link_parse_javascript": "const resp = await this.request(\"GET\", 'https://' + this.regex_match[1].replace('play/',''));\nconst parser = new DOMParser();\nconst doc = parser.parseFromString(resp.body, 'text/html');\n\nconst caption = doc.querySelector('h1').innerText;\nconst url = doc.querySelector('video>source').src;\n\nreturn [{\n\turl: url,\n\tcaption: caption,\n\tvideo: true\n}];",
+        "link_parse_javascript": "const resp = await this.request(\"GET\", 'https://' + this.regex_match[1].replace('play/', ''));\nconst parser = new DOMParser();\nconst doc = parser.parseFromString(resp.body, 'text/html');\n\nconst caption = doc.querySelector('h1').innerText;\nconst url = doc.querySelector('video>source').src;\n\nreturn [{\n\turl: url,\n\tcaption: caption,\n\tvideo: true\n}];",
         "modify_headers_json": "[{\n\t\"url_wildcard\": \"https://webmshare.com/*\",\n\t\"action\": \"add\",\n\t\"apply_on\": \"response\",\n\t\"header_name\": \"Access-Control-Allow-Origin\",\n\t\"header_value\": \"*\"\n}]"
     },
     "wikimedia": {
