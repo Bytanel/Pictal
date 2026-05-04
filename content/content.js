@@ -594,7 +594,7 @@ function loadPictal() {
 		// bounds of the page
 		const headerSize = (PICTAL.Rotation % 360 == 0 && PICTAL.HEADER.style.display != "none") ? 25 : 0; // header isn't visible when rotated so don't add extra space
 		const divBorderSize = 12; // image resolution doesn't reflect the size of the div due to the border so account for the space the border takes up
-		const maxHeight = document.documentElement.clientHeight - headerSize - divBorderSize;
+		const maxHeight = window.innerHeight - headerSize - divBorderSize;
 		const maxWidth = document.documentElement.clientWidth - divBorderSize;
 
 		const distanceFromCursor = Number(PICTAL.Preferences["distance_from_cursor"]);
@@ -1025,11 +1025,12 @@ function loadPictal() {
 		// get 5 closest ancestors to the target element
 		let targetSieve = null;
 		let targetURL = null;
+		let targetRect = null;
 		for (const tgt of getAncestors(target, PICTAL.Preferences["select_biggest_element"] ? 5 : 1)) {
 
-			const targetRects = tgt.getClientRects()[0];
-			if (!targetRects) continue;
-			if (!targetRects.width || !targetRects.height) continue;
+			const tgtRect = tgt.getClientRects()[0];
+			if (!tgtRect) continue;
+			if (tgt.localName != "a" && (!tgtRect.width || !tgtRect.height)) continue;
 
 			let elements = new Set();
 
@@ -1059,10 +1060,10 @@ function loadPictal() {
 				for (const el of imgEls) {
 					if (elements.has(el)) continue;
 					if (!el.offsetWidth || !el.offsetHeight) continue; // if invisible
-					const elRects = el.getClientRects()[0];
+					const elRect = el.getClientRects()[0];
 
-					if (Math.abs(elRects.x - targetRects.x) > 5 || Math.abs(elRects.y - targetRects.y) > 5) continue;
-					if (Math.abs(elRects.width - targetRects.width) > 20 || Math.abs(elRects.height - targetRects.height) > 20) continue;
+					if (Math.abs(elRect.x - tgtRect.x) > 5 || Math.abs(elRect.y - tgtRect.y) > 5) continue;
+					if (Math.abs(elRect.width - tgtRect.width) > 20 || Math.abs(elRect.height - tgtRect.height) > 20) continue;
 
 					elements.add(el);
 				};
@@ -1070,7 +1071,6 @@ function loadPictal() {
 				parent = parent.parentNode;
 			}
 			if (elements.size == 1 && elements.has(null)) continue;
-
 
 			// look for urls in all element candidates
 			const urls = new Set();
@@ -1098,6 +1098,7 @@ function loadPictal() {
 				if (el.hasAttribute("data-file-url")) urls.add(el.getAttribute("data-file-url"));
 				if (el.hasAttribute("data-source")) urls.add(el.getAttribute("data-source"));
 			});
+			if (urls.size == 0) continue;
 			if (urls.size == 1 && urls.has(null)) continue;
 
 
@@ -1132,8 +1133,11 @@ function loadPictal() {
 			// get the highest up element that has the same target url as the deepest element's target url
 			// this is so the largest container is used instead of swapping between several valid elements in a container
 			if (tgtURL) {
-				if (!targetURL) targetURL = tgtURL;
-				if (tgtURL[2] == targetURL[2]) {
+				if (!targetURL) {
+					targetURL = tgtURL;
+					targetRect = tgtRect;
+				}
+				if (tgtURL[2] == targetURL[2] && targetRect.width <= tgtRect.width && targetRect.height <= tgtRect.height) { // only use containers that are as big or bigger than the hovered element
 					target = tgt;
 
 					// hide tooltips that would interfere with the preview window

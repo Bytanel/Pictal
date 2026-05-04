@@ -50,27 +50,6 @@ This is for more complex fine tuning that gets run immediately if it passes **Li
 ##### boolean
     true or false
 
-### Link Request Javascript
-
-This determines the url that a GET request will be made to and have the body passed to Link Parse Javascript.
-If this field is left blank then no GET request is made and the body is instead an empty string.
-
-#### API:
-- this.protocol
-    - the http protocol of the url, ex. `https://` / `https://www.`
-- this.link
-    - the rest of the url after the protocol, ex. `mpv.io/manual/`
-- this.regex
-    - the RegExp object of the Link Regex
-- this.regex_match
-    - equivalent to `this.link.match(this.regex)`
-- this.node
-    - the element that your mouse is hovered over
-
-#### Expected Return
-##### URL string
-    "https://old.reddit.com/by_id/t3_vt1nib.json"
-
 ### Link Parse Javascript
 
 This is where the list of urls you want shown in the preview is created. You have to determine yourself if something is a video or not, there is no automatic checking.
@@ -146,6 +125,11 @@ Note: The `add` and `modify` actions do the same thing.
     	"apply_on": "response",
     	"header_name": "Access-Control-Allow-Origin",
     	"header_value": "*"
+    }, {
+    	"url_wildcard": "https://example.com/*",
+    	"action": "delete",
+    	"apply_on": "request",
+    	"header_name": "Sec-Fetch-Storage-Access"
     }]
 
 # Notes

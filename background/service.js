@@ -362,12 +362,21 @@ function addModifyHeaderRules(sieves) {
 	for (const sieve in sieves) {
 		if (!sieves[sieve].modify_headers_json) continue;
 		JSON.parse(sieves[sieve].modify_headers_json).forEach(sieveRule => {
-			if (!sieveRule.header_name || !sieveRule.header_value || !sieveRule.url_wildcard || !sieveRule.apply_on) return;
-			let headers = [{
-				header: sieveRule.header_name,
-				operation: "set",
-				value: sieveRule.header_value
-			}];
+			if (!sieveRule.header_name || !sieveRule.url_wildcard || !sieveRule.apply_on) return;
+			let headers;
+			if (sieveRule.action == "add" || sieveRule.action == "modify"){
+				headers = [{
+					header: sieveRule.header_name,
+					operation: "set",
+					value: sieveRule.header_value
+				}];
+			}
+			else if (sieveRule.action == "delete"){
+				headers = [{
+					header: sieveRule.header_name,
+					operation: "remove"
+				}];
+			}
 
 			let rule = {
 				id: ruleID++,
