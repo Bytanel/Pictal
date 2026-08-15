@@ -56,10 +56,10 @@
     },
     "civitai.com": {
         "enabled": true,
-        "link_regex": "^civitai\\.(?:com|red)/(posts|models)/(\\d+)",
-        "link_parse_javascript": "let url;\nif (this.regex_match[1] == 'models') {\n\turl = this.protocol + 'civitai.com/api/v1/models/' + this.regex_match[2];\n} else {\n\turl = this.protocol + 'civitai.com/api/v1/images?nsfw=X&postId=' + this.regex_match[2];\n}\n\nconst resp = await this.request(\"GET\", url);\nconst json = JSON.parse(resp.body);\n\nconst images = [];\nif (this.regex_match[1] == 'models') {\n\tfor (const post of json.modelVersions[0].images) {\n\t\timages.push({\n\t\t\turl: post.url,\n\t\t\tvideo: (post.type == 'video')\n\t\t});\n\t}\n\timages[0].caption = `[${json.name}] ${json.description}`;\n} else {\n\tfor (const post of json.items) {\n\t\timages.push({\n\t\t\turl: post.url,\n\t\t\tcaption: post.meta.prompt,\n\t\t\tvideo: (post.type == 'video')\n\t\t});\n\t}\n}\n\nreturn images;",
-        "image_regex": "^image\\.civitai\\.com/(\\w+/[^/]+).*(\\.\\w+)",
-        "image_parse_javascript": "const $ = this.regex_match;\n\nif ($[2] == '.webm' || $[2] == '.mp4') {\n\t// some original files aren't decodable by the browser so use transcode\n\treturn this.protocol + 'image.civitai.com/' + $[1] + '/transcode=true,optimized=true/pictal.mp4';\n} else {\n\treturn this.protocol + 'image.civitai.com/' + $[1] + '/so';\n}"
+        "link_regex": "^(civitai\\.(?:com|red))/(posts|models)/(\\d+)",
+        "link_parse_javascript": "let url;\nif (this.regex_match[2] == 'models') {\n\turl = this.protocol + this.regex_match[1] + '/api/v1/models/' + this.regex_match[3];\n} else {\n\turl = this.protocol + this.regex_match[1] + '/api/v1/images?nsfw=X&postId=' + this.regex_match[3];\n}\n\nconst resp = await this.request(\"GET\", url);\nconst json = JSON.parse(resp.body);\n\nconst images = [];\nif (this.regex_match[2] == 'models') {\n\tfor (const post of json.modelVersions[0].images) {\n\t\timages.push({\n\t\t\turl: post.url,\n\t\t\tvideo: (post.type == 'video')\n\t\t});\n\t}\n\timages[0].caption = `[${json.name}] ${json.description}`;\n} else {\n\tfor (const post of json.items) {\n\t\tconsole.log(post);\n\t\timages.push({\n\t\t\turl: post.url,\n\t\t\tcaption: post?.meta?.prompt,\n\t\t\tvideo: (post.type == 'video')\n\t\t});\n\t}\n}\n\nreturn images;",
+        "image_regex": "^image\\.civitai\\.com/(\\w+/[^/]+).*",
+        "image_parse_javascript": "return this.protocol + 'image.civitai.com/' + this.regex_match[1] + '/original';"
     },
     "danbooru.donmai.us": {
         "enabled": true,
@@ -222,6 +222,16 @@
         "image_regex": "^(images\\.kick\\.com/video_thumbnails/\\w+/\\w+/)",
         "image_parse_javascript": "return this.protocol + this.regex_match[1] + '1080.webp';"
     },
+    "kiwifarms_image": {
+        "enabled": true,
+        "link_regex": "^kiwifarms\\.\\w*/attachments/[^/]+[.-](?:jpe?g|png|gif|webp)\\.\\d+/",
+        "link_parse_javascript": "return [{\n\turl: this.protocol + this.link,\n\tcaption: this.node.closest('img').alt\n}];"
+    },
+    "kiwifarms_video": {
+        "enabled": true,
+        "link_regex": "^(kiwifarms\\.\\w*/\\w*-stream/\\d*)/preview.webp",
+        "link_parse_javascript": "return [{\n\turl: this.protocol + this.regex_match[1] + '/master.m3u8',\n\tvideo: true,\n\tvideojs: true\n}];"
+    },
     "mediafire.com": {
         "enabled": true,
         "link_regex": "^mediafire\\.com/(?:view|file)/.+",
@@ -258,6 +268,11 @@
         "image_parse_javascript": "const $ = this.regex_match;\n\nif ($[2] == 'mp4') {\n\treturn this.protocol + 'v.' + $[1] + '.mp4';\n}\nreturn this.protocol + 'w.' + $[1] + '.webp';",
         "prioritize_images": true
     },
+    "pawchive": {
+        "enabled": true,
+        "link_regex": "^(pawchive\\.(?:cr|pw|s[tu]))/([^/]+/user/[^/]+/post/[\\w-]+).*",
+        "link_parse_javascript": "const api = this.protocol + this.regex_match[1] + '/api/v1/' + this.regex_match[2];\n\nconst resp = new XMLHttpRequest();\nresp.open(\"GET\", api, false);\nresp.setRequestHeader('accept', 'text/css');\nresp.send();\nconst json = JSON.parse(resp.responseText);\n\nconst imgs = new Set();\nconst images = [];\nif (json.file.path) {\n\tconst url = this.protocol + 'file.' + this.regex_match[1] + '/data' + json.file.path;\n\timages.push({\n\t\turl: url,\n\t\tvideo: /(mp4|m4v|webm|mov)$/.test(json.file.path),\n\t\tfilename: json.file.name\n\t});\n\timgs.add(url);\n}\n\nfor (const att of json.attachments) {\n\tif (/(7z|bin|docx?|pdf|rar|txt|zip|psd)$/.test(att.path)) continue;\n\n\tconst url = this.protocol + 'file.' + this.regex_match[1] + '/data' + att.path;\n\tif (imgs.has(url)) continue;\n\n\timages.push({\n\t\turl: url,\n\t\tvideo: /(mp4|m4v|webm|mov)$/.test(att.path),\n\t\tfilename: att.name\n\t});\n\timgs.add(url);\n}\nif (images.length) images[0].caption = json.title;\n\nreturn images;"
+    },
     "pixeldrain": {
         "enabled": true,
         "link_regex": "^pixeldra(?:\\.in|in\\.(?:com|net))/(?:l|u)/(\\w+)",
@@ -268,8 +283,9 @@
         "enabled": true,
         "link_regex": "^(pixiv\\.net/)(?:(?:\\w\\w/)?artworks/|member_illust\\.php\\?mode=(?:[^&]+&)+?illust_id=)(\\d+).*",
         "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + this.link.replace(this.regex, '$1ajax/illust/$2'));\nconst json = JSON.parse(resp.body);\n\nif (json.error) return false;\nif (!json.body.urls.original) return false;\n\nconst images = [];\nfor (let i = 0; i < json.body.pageCount; i++) {\n\timages.push({\n\t\turl: json.body.urls.regular.replace('_p0', '_p' + i)\n\t});\n\n}\nimages[0].caption = '[' + json.body.title + '] ' + new DOMParser().parseFromString(json.body.description, 'text/html').body.textContent;\n\nreturn images;",
-        "image_regex": "^i(?:\\d\\.pixiv|\\.pximg)\\.net/(\\S*?)/img/(.+)",
-        "image_parse_javascript": "var $ = this.regex_match;\nif ($[1] == 'img-original') return this.protocol + this.link;\nif ($[1] == 'user-profile') return this.protocol + this.link.replace(/_\\d*.jpg/, '.jpg');\nreturn this.protocol + 'i.pximg.net/img-original/img' + $[2] + '.#jpg png gif#';",
+        "image_regex": "^i(?:\\d\\.pixiv|\\.pximg)\\.net/(\\S*?)/img/(.+)(_p\\d*)_",
+        "image_filter_javascript": "// don't use on gallery view\nif (this.node.closest('div[class~=\"group\"]')) return false;\n\nreturn true;",
+        "image_parse_javascript": "var $ = this.regex_match;\nif ($[1] == 'img-original') return this.protocol + this.link;\nif ($[1] == 'user-profile') return this.protocol + this.link.replace(/_\\d*.jpg/, '.jpg');\nreturn this.protocol + 'i.pximg.net/img-original/img/' + $[2] + $[3] + '.#jpg png gif#';",
         "modify_headers_json": "[{\n\t\"url_wildcard\": \"https://i.pximg.net/img*\",\n\t\"action\": \"add\",\n\t\"apply_on\": \"request\",\n\t\"header_name\": \"Referer\",\n\t\"header_value\": \"https://www.pixiv.net/\"\n}]"
     },
     "pornhub_video": {
@@ -285,7 +301,7 @@
     "reddit.com_gallery": {
         "enabled": true,
         "link_regex": "^(reddit\\.com/)gallery/([\\da-z]+).*",
-        "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + `${this.regex_match[1]}by_id/t3_${this.regex_match[2]}.json`);\nconst json = JSON.parse(resp.body).data.children[0].data;\n\nconst images = [];\nfor (const m in json.media_metadata) {\n\timages.push({\n\t\turl: json.media_metadata[m].s.u.replace('preview.redd.it', 'i.redd.it').split('?')[0]\n\t});\n}\nimages[0].caption = json.title;\n\nreturn images;"
+        "link_parse_javascript": "const resp = await this.request(\"GET\", (window.location.hostname == 'www.reddit.com' ? this.protocol : this.protocol.replace('www', 'old')) + `${this.regex_match[1]}by_id/t3_${this.regex_match[2]}.json`);\nconst json = JSON.parse(resp.body).data.children[0].data;\n\nconst images = [];\nfor (const m in json.media_metadata) {\n\timages.push({\n\t\turl: json.media_metadata[m].s.u.replace('preview.redd.it', 'i.redd.it').split('?')[0]\n\t});\n}\nimages[0].caption = json.title;\n\nreturn images;"
     },
     "reddit.com_thumbs": {
         "enabled": true,
@@ -312,6 +328,11 @@
         "image_regex": "^(?:rule34|r34i|r34t)\\.paheal(?:-cdn)?\\.net/(?:_thumbs|../..)/([a-f0-9]*)",
         "image_parse_javascript": "const $ = this.regex_match;\nreturn this.protocol + 'r34i.paheal-cdn.net/' + $[1].substr(0, 2) + '/' + $[1].substr(2, 2) + '/' + $[1];",
         "prioritize_images": true
+    },
+    "rule34.us": {
+        "enabled": true,
+        "link_regex": "^(rule34\\.us)/index\\.php\\?r=posts/view&id=\\d+.*",
+        "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + this.link);\n\nconst link = resp.body.match(/<a href=\"(https:[^\"]+)\"><li/)?.[1];\nif (!link) return false;\n\nconst caption = resp.body.match(/<meta name=\"keywords\" content=\"[^\"]+?, ([\\da-h][^\"]+)/)?.[1] || '';\nconst ext = new URL(link).pathname.split('.').pop();\n\nreturn [{\n\turl: link,\n\tcaption: caption,\n\tvideo: (ext == 'mp4' || ext == 'webm')\n}];"
     },
     "rule34.xxx|rule34.wtf": {
         "enabled": true,
@@ -357,6 +378,11 @@
         "link_regex": "^tiktok\\.com/@[^/]+/video/(\\d+)",
         "link_parse_javascript": "const resp = await this.request(\"GET\", this.protocol + 'tiktok.com/embed/v2/' + this.regex_match[1]);\n\nconst data = JSON.parse(resp.body.match(/\"__FRONTITY_CONNECT_STATE__\" type=\"application\\/json\">({.+?})<\\/script/)[1]).source.data['/embed/v2/' + this.regex_match[1]].videoData;\n\nconst url = data.itemInfos.video.urls[0];\nconst caption = `[${data.authorInfos.nickName}] ${data.itemInfos.text}`;\nconst filename = `${data.authorInfos.uniqueId}_${this.regex_match[1]}.mp4`;\n\nreturn [{\n\turl: url,\n\tcaption: caption,\n\tfilename: filename,\n\tvideo: true\n}];"
     },
+    "twitch_clip": {
+        "enabled": true,
+        "link_regex": "(?:twitch.tv/\\w*/clip/([^/\\?]*))|(?:clips\\.twitch.tv/([^/\\?]*))",
+        "link_parse_javascript": "const clip = (this.regex_match[1] ?? '') + (this.regex_match[2] ?? '');\n\nconst resp = new XMLHttpRequest();\nresp.open('POST', 'https://gql.twitch.tv/gql', false);\nresp.setRequestHeader('Client-ID', 'kimne78kx3ncx6brgo4mv6wki5h1ko');\nresp.send(`[{\"operationName\":\"VideoPlayerStreamInfoOverlayClip\",\"variables\":{\"slug\":\"${clip}\"},\"extensions\":{\"persistedQuery\":{\"version\":1,\"sha256Hash\":\"423d17411d673cffa7c8c27f1ccd03c6b56c6f6254de7f25c74de56a61f9a4a1\"}}},{\"operationName\":\"VideoAccessToken_Clip\",\"variables\":{\"platform\":\"web\",\"slug\":\"${clip}\"},\"extensions\":{\"persistedQuery\":{\"version\": 1,\"sha256Hash\":\"6fd3af2b22989506269b9ac02dd87eb4a6688392d67d94e41a6886f1e9f5c00f\"}}}]`);\n\nconst json = JSON.parse(resp.responseText);\nconst jsonclip = json[1].data.clip;\n\nreturn [{\n\turl: jsonclip.videoQualities[1].sourceURL + `?sig=${jsonclip.playbackAccessToken.signature}&token=${jsonclip.playbackAccessToken.value}`,\n\tcaption: json[0].data.clip.title,\n\tvideo: true\n}];"
+    },
     "webmshare.com": {
         "enabled": true,
         "link_regex": "^(?:s\\d\\.)?(webmshare\\.com/(?:play/)?\\w{5})",
@@ -386,8 +412,7 @@
     },
     "xenforo forums": {
         "enabled": true,
-        "image_regex": "^[^/]+/attachments/[^/]+[.-](?:jpe?g|png|gif)\\.\\d+/",
-        "image_parse_javascript": "return this.protocol + this.link;",
+        "image_regex": "^[^/]+/attachments/[^/]+[.-](?:jpe?g|png|gif|webp)\\.\\d+/",
         "prioritize_images": true
     },
     "xvideos.com": {
@@ -407,7 +432,7 @@
     "~images": {
         "enabled": true,
         "link_regex": "^[^?#]{6,4096}\\.(?:jp(?:g|eg?)|heic|3gp|a?png|pnj|gifv?|webp|bmp|xbm|pict|j(?:if|fif?))(?:$|[?#]).*",
-        "link_filter_javascript": "// don't select video thumbnails on x.com\nif (this.link.includes('/amplify_video_thumb/')) return false;\nif (this.link.includes('/ext_tw_video_thumb/')) return false;\n\nreturn true;",
+        "link_filter_javascript": "// don't select video thumbnails on x.com\nif (this.link.includes('/amplify_video_thumb/')) return false;\nif (this.link.includes('/ext_tw_video_thumb/')) return false;\n\n// stop issue in pixiv gallery view\nif (this.link.includes('i.pximg.net')) return false;\n\nreturn true;",
         "link_parse_javascript": "return [{\n\turl: this.protocol + this.link\n}];"
     },
     "~videos": {

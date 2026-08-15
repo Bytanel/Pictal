@@ -267,7 +267,7 @@ function loadPictal() {
 			height: 100%;
 		`;
 		PICTAL.IMG.onload = function(e) {
-			if (PICTAL.State == "loading" && e.target.src == HoveredLinks.getFile().url) {
+			if (PICTAL.State == "loading" && e.target.src == HoveredLinks.getFile()?.url) {
 				PICTAL.IMG.style.display = "initial";
 				fileLoaded();
 				updateDIV();
@@ -281,7 +281,7 @@ function loadPictal() {
 			}
 		};
 		PICTAL.IMG.onerror = function(e) {
-			if (e.target.src != HoveredLinks.getFile().url) return;
+			if (e.target.src != HoveredLinks.getFile()?.url) return;
 			clearInterval(PICTAL.IMGTimer);
 			PICTAL.DIV.style.display = "none";
 			updateLoader(); // cached links don't show a loader so show one if a cached link doesn't work
@@ -329,7 +329,7 @@ function loadPictal() {
 			updateDIV();
 		};
 		PICTAL.VIDEO.onerror = function(e) {
-			if (e.target.src != HoveredLinks.getFile().url) return;
+			if (e.target.src != HoveredLinks.getFile()?.url) return;
 			PICTAL.DIV.style.display = "none";
 			updateLoader();
 			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
@@ -802,6 +802,7 @@ function loadPictal() {
 			PICTAL.State = "loading";
 			hoverArgs = [];
 			createPreviewElements();
+			HoveredLinks.set(null);
 
 			if (HoveredLinks.contains(fullURL)) {
 				PICTAL.LOADER.style.backgroundColor = COLORS.GREEN;
@@ -1512,8 +1513,18 @@ function loadPictal() {
 	}
 
 	document.addEventListener("wheel", (e) => {
-		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
-		if (PICTAL.State == "loading" || PICTAL.Center) stopPropagation(e);
+		if (PICTAL.State == "idle") return;
+
+		// acknowledge that scrolling is the same as moving your mouse
+		if (PICTAL.State == "selecting") {
+			if (PICTAL.Preferences["reset_delay_on_mouse_move"]) setupTimer();
+			return;
+		}
+
+		// allow scrolling even with white spinner if we don't know if it's an album with multiple files or not
+		if (PICTAL.State == "loading" && !PICTAL.Center && !HoveredLinks.getFiles().length) return;
+		if (HoveredLinks.getFiles().length > 1 || PICTAL.Center) stopPropagation(e);
+		else return;
 
 		if (PICTAL.Center && ((PICTAL.DIV.contains(e.target) && !isNearSide(e)) || HoveredLinks.getFiles().length == 1 || e.altKey) && !e.shiftKey) {
 			stopPropagation(e);
