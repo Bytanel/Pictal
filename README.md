@@ -4,33 +4,33 @@ A browser extension based on [Imagus Reborn](https://github.com/hababr/Imagus-Re
 
 Fully supported on Chrome and Firefox.
 
-Development is primarily focused on Firefox because that is what I use and the problems Imagus had on Firefox is what led me to create Pictal in the first place. If there are any issues on Chrome then I may not catch them unless reported.
-
 <div align="center">
 <img width="726" height="241" src="https://github.com/user-attachments/assets/00b86063-4327-4aae-a386-dee2196be20a"/>
 </div>
 <br>
 
 <img width="16" height="16" src="https://raw.githubusercontent.com/Bytanel/Pictal/master/common/img/icon_64.png"/> Icon by [iiiGerardoiii](https://github.com/iiiGerardoiii)
-# How Pictal Works
+## How Pictal Works
 
-1. On page load, all your sieves, preferences, and shortcuts are loaded. To see any changes to those you will need to refresh the page.
+1. On page load, all your sieves, preferences, and shortcuts are loaded. To see any changes to those, you will need to refresh the page.
 2. Everytime an element is moused over, it looks for urls in the element, its ancestors, and its cousins that are roughly the same size and in the same place as the element being moused over. If you hover over the parent of a valid element and that parent also is valid then the parent will be prioritized and you won't be able to hover over the child valid element. This is to minimize the inconvenience of when the preview gets reloaded due to you moving your mouse a little and hovering over a different valid element in the same container.
 3. The gathered urls are compared to the sieves in their alphanumeric order and the first match against a **Link Regex** or **Image Regex** is used.
 4. The selection outline is shown and a timer counts down based on the display delay in the options.
 5. Once the timer hits 0, the loading icon is shown and the url is parsed and processed through the matched sieve and then formatted into an object that Pictal can use.
-6. If the loading icon turns green, it means the returned object passes all the checks and will attempt to display the image/video in the preview. If the loading icon turns red, it means that an error occured while loading the image/video or the returned object didn't pass the checks.  
+6. If the loading icon turns green, it means the returned object passes all the checks and will attempt to display the image/video in the preview. If the loading icon turns red, it means that an error occured while loading the image/video or the returned object didn't pass the checks.
 
-# Differences Between Pictal and Imagus
+## Differences Between Pictal and Imagus
 
 * Aside from most of the options page, Pictal has been written entirely from scratch. It isn't using the same code as Imagus or its forks.
 * There isn't feature parity with Imagus (yet). A lot of preferences, some shortcuts, and sieve settings are missing although if there is demand for those features then they could be added.
 * There is included a system to modify headers like Simple Modify Headers.
 * There is native VideoJS support for HLS and MPD streams, an extension system is unneeded.
-* The core of the sieve only uses javascript, there is no swapping between javascript mode and regex mode. I want this to be as simple as possible.
+* The core of the sieves only use javascript, there is no swapping between javascript mode and regex mode. I want this to be as simple as possible.
 * The grant/site filter system only uses regex, there is no swapping between modes.
 * There is no high resolution and low resolution mode, you can only choose one url.
 * The APIs available to the sieves are completely different.
+
+---
 
 # Sieves
 
@@ -44,93 +44,121 @@ This determines what links you want looked for when hovering your mouse over HTM
 
 ### Link Filter Javascript
 
-This is for more complex fine tuning that gets run immediately if it passes **Link Regex**. This is mainly for when there are elements that you won't want highlighted. There should not be anything that takes time to execute such as promises or networking in this field.
+This is for more complex fine tuning that gets run immediately if it passes **Link Regex**. This is mainly for when there are elements that you don't want highlighted. There should not be anything that takes time to execute such as promises or networking in this field.
 
 #### Expected Return
-##### boolean
-    true or false
+**boolean**
+```
+true or false
+```
 
 ### Link Parse Javascript
 
 This is where the list of urls you want shown in the preview is created. You have to determine yourself if something is a video or not, there is no automatic checking.
 
-#### API:
-- this.protocol
-- this.link
-- this.regex
-- this.regex_match
-- this.request(url, method, blob = false)
-    - this async function attempts to run a fetch request in the user script context and then in service worker context to maximize the chances of success; the returned object's properties are `{ status, headers, body }`
-- this.node
+#### API
+
+| Member             | Type     | Example                                              |
+|--------------------|----------|------------------------------------------------------|
+| this.protocol      | String   | `"https://www."`                                     |
+| this.link          | String   | `"example.com/images/123.png"`                       |
+| this.regex         | RegExp   | `/example.com\/images\/(\d*)\.png/i`                 |
+| this.regex_match   | Array    | `[ "example.com/images/123.png", "123" ]`            |
+| this.node          | Node     | `<img src="https://www.example.com/images/123.png">` |
+
+| Method       | Type           | Arguments                     | Result                      |
+|--------------|----------------|-------------------------------|-----------------------------|
+| this.request | Async Function | `(method, url, blob = false)` | `{ status, headers, body }` |
+
+> [!NOTE]
+> This async function attempts to run a fetch request in the user script context and then in service worker context to maximize the chance of success.
+
 
 #### Expected Return
+**Array of Objects**
+```Javascript
+[
+    { url: "https://i.redd.it/753dud93zbjg1.png", caption: "tigers" },
+    { url: "https://fxtwitter.com/hylics/status/1531022290456088577.mp4", video: true, filename: "meme.mp4" }
+    { url: "https://v.redd.it/cq4ti5ut43jg1/DASHPlaylist.mpd", video: true, videojs: true }
+]
+```
 
-##### Array of objects
-    [
-        { url: "https://i.redd.it/753dud93zbjg1.png", caption: "tigers" },
-        { url: "https://fxtwitter.com/hylics/status/1531022290456088577.mp4", video: true, filename: "meme.mp4" }
-        { url: "https://v.redd.it/cq4ti5ut43jg1/DASHPlaylist.mpd", video: true, videojs: true }
-    ]
+---
 
 ## Images
 
-This is for links that are media files and links whose extension you don't know. There are no captions but you can brute force through a combination of different file extensions.
+This is for links that you want to do a simple url transformation to turn into a valid media file and for media files whose extension you don't know and want to brute force.
 
 ### Image Regex
 
-This determines what links you want to be looked for when hovering your mouse on html elements.
+See [Link Regex](#link-regex).
 
 ### Image Filter Javascript
 
-This is the same as **Link Filter Javascript**.
+See [Link Filter Javascript](#link-filter-javascript).
 
 #### Expected Return
-##### boolean
-    true or false
+**boolean**
+```
+true or false
+```
 
 ### Image Parse Javascript
 
-This is where you choose which url you want shown in the preview. You can use a wildcard system to check each combination for the valid link. If it has a video file extension then it is determined to be a video, if there is no valid video extension then it is determined based on its content-type.
+This is where you choose which url you want shown in the preview. You can use a wildcard system to check each combination for the valid media file. If it has a video file extension then it is determined to be a video, if there is no valid video extension then it is determined based on its returned content-type header.
 
 If this field is left blank then the full url is passed to the preview as-is.
 
-#### API:
-- this.protocol
-- this.link
-- this.regex
-- this.regex_match
-- this.node
+#### API
+
+| Member             | Type     | Example                                              |
+|--------------------|----------|------------------------------------------------------|
+| this.protocol      | String   | `"https://www."`                                     |
+| this.link          | String   | `"example.com/images/123.png"`                       |
+| this.regex         | RegExp   | `/example.com\/images\/(\d*)\.png/i`                 |
+| this.regex_match   | Array    | `[ "example.com/images/123.png", "123" ]`            |
+| this.node          | Node     | `<img src="https://www.example.com/images/123.png">` |
 
 
 #### Expected Return
-    "https://i.4cdn.org/g/1745612666469146.#jpg png mp4 webm gif#"
+**string**
+```
+"https://i.4cdn.org/g/1745612666469146.#jpg png mp4 webm gif#"
+```
 
+---
 
 # Modify Headers
 
 This allows you to modify headers if some pages are expecting certain headers. It does the same job as an extension like [Simple Modify Headers](https://github.com/didierfred/SimpleModifyHeaders).
 
-Note: The `add` and `modify` actions do the same thing.
+> [!NOTE]
+> The `add` and `modify` actions do the same thing.
 
 ### Example
-    [{
-    	"url_wildcard": "https://i.pximg.net/img*",
-    	"action": "modify",
-    	"apply_on": "request",
-    	"header_name": "Referer",
-    	"header_value": "https://www.pixiv.net/"
-    }, {
-    	"url_wildcard": "https://example.com/*",
-    	"action": "add",
-    	"apply_on": "response",
-    	"header_name": "Access-Control-Allow-Origin",
-    	"header_value": "*"
-    }, {
-    	"url_wildcard": "https://example.com/*",
-    	"action": "delete",
-    	"apply_on": "request",
-    	"header_name": "Sec-Fetch-Storage-Access"
-    }]
+```JSON
+[{
+    "url_wildcard": "https://i.pximg.net/img*",
+    "action": "modify",
+    "apply_on": "request",
+    "header_name": "Referer",
+    "header_value": "https://www.pixiv.net/"
+}, {
+    "url_wildcard": "https://example.com/*",
+    "action": "add",
+    "apply_on": "response",
+    "header_name": "Access-Control-Allow-Origin",
+    "header_value": "*"
+}, {
+    "url_wildcard": "https://example.com/*",
+    "action": "delete",
+    "apply_on": "request",
+    "header_name": "Sec-Fetch-Storage-Access"
+}]
+```
+
+---
 
 # Notes
 

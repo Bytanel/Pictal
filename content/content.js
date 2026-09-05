@@ -132,6 +132,10 @@ function loadPictal() {
 		PICTAL.Shortcuts = response.shortcuts;
 	});
 
+	function debug(...args) {
+		if (PICTAL.Preferences["debug_mode"]) console.log(...args);
+	}
+
 	// object meant to organize the files and metadata used for the preview
 	class URLCache {
 		parsedLinkCache = {}; // table of album objects from links already parsed by sieves
@@ -267,6 +271,8 @@ function loadPictal() {
 			height: 100%;
 		`;
 		PICTAL.IMG.onload = function(e) {
+			debug("img onload event", e);
+
 			if (PICTAL.State == "loading" && e.target.src == HoveredLinks.getFile()?.url) {
 				PICTAL.IMG.style.display = "initial";
 				fileLoaded();
@@ -282,6 +288,7 @@ function loadPictal() {
 		};
 		PICTAL.IMG.onerror = function(e) {
 			if (e.target.src != HoveredLinks.getFile()?.url) return;
+			debug("<img> error", PICTAL.State);
 			clearInterval(PICTAL.IMGTimer);
 			PICTAL.DIV.style.display = "none";
 			updateLoader(); // cached links don't show a loader so show one if a cached link doesn't work
@@ -302,6 +309,7 @@ function loadPictal() {
 			cursor: zoom-in;
 		`;
 		PICTAL.VIDEO.onloadedmetadata = function(e) {
+			debug("onloadedmetadata", PICTAL.State);
 			if (PICTAL.State != "loading") return;
 
 			if (HoveredLinks.getFile().videojs) {
@@ -330,6 +338,7 @@ function loadPictal() {
 		};
 		PICTAL.VIDEO.onerror = function(e) {
 			if (e.target.src != HoveredLinks.getFile()?.url) return;
+			debug("<video> error", PICTAL.State);
 			PICTAL.DIV.style.display = "none";
 			updateLoader();
 			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
@@ -482,6 +491,7 @@ function loadPictal() {
 	}
 
 	function fileLoaded(elWidth = null, elHeight = null) {
+		debug("fileLoaded");
 		const file = HoveredLinks.getFile();
 		const albumSize = HoveredLinks.getFiles().length;
 
@@ -522,6 +532,7 @@ function loadPictal() {
 	let LastFilePreviewed = null;
 
 	function loadPreviewFile() {
+		debug("loadPreview", HoveredLinks.getFile());
 		if (PICTAL.State == "idle") return;
 
 		const file = HoveredLinks.getFile();
@@ -716,6 +727,7 @@ function loadPictal() {
 
 	// stop everything and reset to initial conditions
 	function reset() {
+		debug("reset");
 		if (PICTAL.HoverTimer) {
 			clearTimeout(PICTAL.HoverTimer);
 			PICTAL.HoverTimer = null;
@@ -762,6 +774,7 @@ function loadPictal() {
 		}
 
 		if (PICTAL.Preferences["hold_to_activate"] == "enabled" && !PICTAL.isHoldingActivateKey) return;
+		if (!(PICTAL.Preferences["hold_to_activate"] == "enabled" && !PICTAL.isHoldingActivateKey)) updateOutline(); // don't show outline when unactivated
 
 		let [sieveType, protocol, link] = targetURL;
 
@@ -882,6 +895,7 @@ function loadPictal() {
 					const match = request_url.match(/#([^#]+)#/);
 					links = match ? match[1].trim().split(/\s+/).map(ext => request_url.replace(match[0], ext)) : [request_url];
 				}
+				debug("img links", links);
 
 				// if it's a single possible link and we know the filetype then just use it
 				const ext = new URL(links[0])?.pathname?.split(".").pop();
@@ -1103,6 +1117,10 @@ function loadPictal() {
 			if (urls.size == 1 && urls.has(null)) continue;
 
 
+			debug("target element", tgt);
+			debug("urls", urls);
+
+
 			// look for link regex and image regex matches and use the first match
 			let tgtURL = null;
 			for (const s in PICTAL.Sieves) {
@@ -1155,8 +1173,6 @@ function loadPictal() {
 		PICTAL.TargetedElement = target;
 		PICTAL.LOADER.style.backgroundColor = COLORS.WHITE;
 		PICTAL.State = "selecting";
-
-		updateOutline();
 
 		setupTimer(targetSieve, target, targetURL);
 	});

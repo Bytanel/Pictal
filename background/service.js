@@ -20,6 +20,7 @@ const DefaultPreferences = {
 	keep_cached_album_index: true,
 	click_to_close: true,
 	select_biggest_element: true,
+	debug_mode: false,
 	show_caption: true,
 	wrap_caption: false,
 	caption_position: "top",
@@ -365,6 +366,7 @@ function addModifyHeaderRules(sieves) {
 			if (!sieveRule.header_name || !sieveRule.url_wildcard || !sieveRule.apply_on) return;
 			let headers;
 			if (sieveRule.action == "add" || sieveRule.action == "modify"){
+				if (!sieveRule.header_value) return;
 				headers = [{
 					header: sieveRule.header_name,
 					operation: "set",
