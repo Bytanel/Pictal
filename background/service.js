@@ -109,7 +109,7 @@ function onMessage(message, sender, sendResponse) {
 		});
 		return true;
 	}
-	if (message.type == "GetVideoJSJavacript") {
+	if (message.type == "GetVideoJSJavascript") {
 		fetch(chrome.runtime.getURL("lib/videojs/video.js")).then(r => r.text())
 			.then(js => {
 				sendResponse({

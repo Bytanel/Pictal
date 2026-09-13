@@ -1,6 +1,7 @@
 "use strict";
 
 const protocolRegex = new RegExp(/^(?:(https?:\/\/(?:www\.)?))?(.*)$/i);
+const backgroundImageRegex = new RegExp(/^url\(["']([^"']+)/i);
 
 chrome.runtime.sendMessage({
 	type: "GetSiteFilters"
@@ -29,13 +30,6 @@ chrome.runtime.sendMessage({
 	if (window.location.hash.includes("PICTALFILENAME=")) {
 		downloadFile();
 	} else if (window == window.top && !blacklisted && document.contentType == "text/html") { // don't run in iframes and only run on web pages, not direct media files
-		// has to be done here otherwise throws errors for some reason
-		chrome.runtime.sendMessage({
-			type: "GetVideoJSJavacript"
-		}, (response) => {
-			eval(response.js);
-		});
-
 		loadPictal();
 	}
 });
@@ -107,16 +101,16 @@ function downloadFile() {
 
 function loadPictal() {
 	chrome.runtime.sendMessage({
-		type: "GetVideoJSCSS"
-	}, (response) => {
-		const style = document.createElement("style");
-		style.textContent = response.css;
-		document.documentElement.appendChild(style);
-	});
-	chrome.runtime.sendMessage({
 		type: "GetSieves"
 	}, (response) => {
 		PICTAL.Sieves = response.sieves;
+
+		// precompile all the regex statements
+		for (const key in PICTAL.Sieves) {
+			const s = PICTAL.Sieves[key];
+			if (s.link_regex) s.link_regex = new RegExp(s.link_regex, "i");
+			if (s.image_regex) s.image_regex = new RegExp(s.image_regex, "i");
+		}
 	});
 	chrome.runtime.sendMessage({
 		type: "GetPreferences"
@@ -206,8 +200,22 @@ function loadPictal() {
 		RED: "rgb(255, 204, 204)"
 	}
 
-	function setupVideoJS() {
+	async function setupVideoJS() {
 		if (PICTAL.VIDEOJS) return;
+
+		// only load VideoJS when needed
+		chrome.runtime.sendMessage({
+			type: "GetVideoJSCSS"
+		}, (response) => {
+			const style = document.createElement("style");
+			style.textContent = response.css;
+			document.documentElement.appendChild(style);
+		});
+
+		const response = await chrome.runtime.sendMessage({
+			type: "GetVideoJSJavascript"
+		});
+		eval(response.js);
 
 		const vid = PICTAL.VIDEO.cloneNode();
 		vid.className = "video-js vjs-default-skin";
@@ -400,7 +408,7 @@ function loadPictal() {
 		PICTAL.OUTLINE.style.cssText = `
 			position: fixed;
 			box-sizing: content-box;
-			outline: red dashed 1.5px;
+			outline: red dashed 1.5px !important;
 			z-index: 2147483645;
 			opacity: 0;
 			padding: 0;
@@ -531,7 +539,7 @@ function loadPictal() {
 
 	let LastFilePreviewed = null;
 
-	function loadPreviewFile() {
+	async function loadPreviewFile() {
 		debug("loadPreview", HoveredLinks.getFile());
 		if (PICTAL.State == "idle") return;
 
@@ -562,7 +570,7 @@ function loadPictal() {
 
 		if (file.video) {
 			if (file.videojs) {
-				setupVideoJS();
+				await setupVideoJS();
 				PICTAL.VIDEOJS.src({
 					src: file.url
 				});
@@ -587,7 +595,7 @@ function loadPictal() {
 					updateDIV(loader.naturalWidth, loader.naturalHeight);
 					loader.src = "";
 				}
-			}, 1);
+			}, 16);
 			loader.onerror = PICTAL.IMG.onerror;
 
 			PICTAL.VIDEO.style.display = "none";
@@ -910,21 +918,21 @@ function loadPictal() {
 				}
 
 				// look for valid links and figure out the filetype
-				for (const l in links) {
-					makeRequest("HEAD", links[l]).then(resp => {
+				for (const link of links) {
+					makeRequest("HEAD", link).then(resp => {
 						if (resp.status == 200 || resp.status == 206) {
 							let files = [{
-								url: links[l]
+								url: link
 							}];
 							if (resp.headers["content-type"].split("/")[0] == "video") {
 								files = [{
-									url: links[l],
+									url: link,
 									video: true
 								}];
 							}
 
 
-							const url = new URL(links[l]);
+							const url = new URL(link);
 							let filename = url.pathname.split("/").pop();
 							if (!filename.includes(".")) {
 								switch (resp.headers["content-type"]) {
@@ -962,11 +970,21 @@ function loadPictal() {
 		}, delay);
 	}
 
-	function checkSieveURLs(urls, type, regex, filter_javascript, target) {
-		const linkRegex = new RegExp(regex, "i");
+	function checkSieveURLs(urls, type, linkRegex, filter_javascript, target) {
 		for (const e of urls) {
 			if (!protocolRegex.test(e)) continue;
 			const [, protocol, url] = e.match(protocolRegex);
+
+			// benchmark the sieve regex to catch any bad statements
+			if (PICTAL.Preferences["debug_mode"]) {
+				const t0 = performance.now();
+				linkRegex.test(url);
+				const diff = performance.now() - t0;
+				if (diff > 5) {
+					console.error(`${linkRegex} took ${diff}ms to execute.\n`);
+				}
+			}
+
 			if (linkRegex.test(url)) {
 				if (filter_javascript) {
 					const pass = Function(`'use strict';` + filter_javascript).bind({
@@ -976,11 +994,11 @@ function loadPictal() {
 						regex_match: url.match(linkRegex),
 						node: target
 					})();
-					if (pass != true) return null;
+					if (pass != true) continue;
 				}
 				return [type, protocol, url];
 			}
-		};
+		}
 		return null;
 	}
 
@@ -1037,10 +1055,15 @@ function loadPictal() {
 		PICTAL.MouseX = e.clientX;
 		PICTAL.MouseY = e.clientY;
 
+
+		const t0 = performance.now();
+
 		// get 5 closest ancestors to the target element
 		let targetSieve = null;
 		let targetURL = null;
 		let targetRect = null;
+		const total_elements = new Set();
+		const total_urls = new Set();
 		for (const tgt of getAncestors(target, PICTAL.Preferences["select_biggest_element"] ? 5 : 1)) {
 
 			const tgtRect = tgt.getClientRects()[0];
@@ -1050,6 +1073,7 @@ function loadPictal() {
 			let elements = new Set();
 
 			// find closest elements in ancestors
+			elements.add(tgt);
 			elements.add(tgt.closest("a"));
 			elements.add(tgt.closest("img"));
 			elements.add(tgt.closest("video"));
@@ -1073,7 +1097,7 @@ function loadPictal() {
 				}
 
 				for (const el of imgEls) {
-					if (elements.has(el)) continue;
+					if (elements.has(el) || total_elements.has(el)) continue;
 					if (!el.offsetWidth || !el.offsetHeight) continue; // if invisible
 					const elRect = el.getClientRects()[0];
 
@@ -1081,13 +1105,14 @@ function loadPictal() {
 					if (Math.abs(elRect.width - tgtRect.width) > 20 || Math.abs(elRect.height - tgtRect.height) > 20) continue;
 
 					elements.add(el);
-				};
+					total_elements.add(el);
+				}
 
 				parent = parent.parentNode;
 			}
 			if (elements.size == 1 && elements.has(null)) continue;
 
-			// look for urls in all element candidates
+			// look for urls in attributes in all element candidates
 			const urls = new Set();
 			elements.forEach(el => {
 				if (!el) return;
@@ -1112,7 +1137,19 @@ function loadPictal() {
 				}
 				if (el.hasAttribute("data-file-url")) urls.add(el.getAttribute("data-file-url"));
 				if (el.hasAttribute("data-source")) urls.add(el.getAttribute("data-source"));
+				if (el.style.background) {
+					const m = el.style.background.match(backgroundImageRegex);
+					if (m.length > 1) urls.add(m[1]);
+				}
+				if (el.style.backgroundImage) {
+					const m = el.style.backgroundImage.match(backgroundImageRegex);
+					if (m.length > 1) urls.add(m[1]);
+				}
 			});
+
+			for (const u of total_urls) urls.delete(u);
+			for (const u of urls) total_urls.add(u);
+
 			if (urls.size == 0) continue;
 			if (urls.size == 1 && urls.has(null)) continue;
 
@@ -1165,6 +1202,7 @@ function loadPictal() {
 				}
 			}
 		}
+		debug(`sieve check took ${performance.now() - t0}ms`);
 		if (!targetURL) return;
 		targetURL[1] = targetURL[1] || ""; // "data:" urls don't have a protocol
 
@@ -1246,13 +1284,14 @@ function loadPictal() {
 			}
 		}
 
+
+		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
+
+
 		if (!e.ctrlKey && ((e.key == "Escape" && !e.shiftKey) || e.key == PICTAL.Shortcuts.close_preview)) {
 			stopPropagation(e);
 			reset();
 		}
-
-
-		if (PICTAL.State == "idle" || PICTAL.State == "selecting") return;
 
 		if (!e.ctrlKey && (e.key == PICTAL.Shortcuts.zoom_in || (e.key == "Enter" && !e.shiftKey) || (e.key == "NumpadEnter" && !e.shiftKey))) {
 			stopPropagation(e);
@@ -1346,7 +1385,7 @@ function loadPictal() {
 					PICTAL.VIDEO.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
 				}
 			} else {
-				PICTAL.IMG.style.transform = `scale(${PICTAL. Scale[0]}, ${PICTAL.Scale[1]})`;
+				PICTAL.IMG.style.transform = `scale(${PICTAL.Scale[0]}, ${PICTAL.Scale[1]})`;
 			}
 		}
 

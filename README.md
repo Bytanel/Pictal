@@ -42,6 +42,11 @@ This is for general links that aren't themselves media files and links that may 
 
 This determines what links you want looked for when hovering your mouse over HTML elements.
 
+> [!CAUTION]
+> If you are using a `+` or `*` at the beginning of your statement, then you need to use a beginning anchor otherwise it will check every subset which is very slow.
+> Bad: `.+/thumb/[a-f0-9]{32}`
+> Good: `^.+/thumb/[a-f0-9]{32}`
+
 ### Link Filter Javascript
 
 This is for more complex fine tuning that gets run immediately if it passes **Link Regex**. This is mainly for when there are elements that you don't want highlighted. There should not be anything that takes time to execute such as promises or networking in this field.
