@@ -44,7 +44,9 @@ This determines what links you want looked for when hovering your mouse over HTM
 
 > [!CAUTION]
 > If you are using a `+` or `*` at the beginning of your statement, then you need to use a beginning anchor otherwise it will check every subset which is very slow.
+> 
 > Bad: `.+/thumb/[a-f0-9]{32}`
+> 
 > Good: `^.+/thumb/[a-f0-9]{32}`
 
 ### Link Filter Javascript
