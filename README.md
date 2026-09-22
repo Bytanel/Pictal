@@ -44,9 +44,9 @@ This determines what links you want looked for when hovering your mouse over HTM
 
 > [!CAUTION]
 > If you are using a `+` or `*` at the beginning of your statement, then you need to use a beginning anchor otherwise it will check every subset which is very slow.
-> 
+>
 > Bad: `.+/thumb/[a-f0-9]{32}`
-> 
+>
 > Good: `^.+/thumb/[a-f0-9]{32}`
 
 ### Link Filter Javascript
@@ -87,7 +87,7 @@ This is where the list of urls you want shown in the preview is created. You hav
 [
     { url: "https://i.redd.it/753dud93zbjg1.png", caption: "tigers" },
     { url: "https://fxtwitter.com/hylics/status/1531022290456088577.mp4", video: true, filename: "meme.mp4" }
-    { url: "https://v.redd.it/cq4ti5ut43jg1/DASHPlaylist.mpd", video: true, videojs: true }
+    { url: "https://v.redd.it/cq4ti5ut43jg1/DASHPlaylist.mpd", video: true, videojs: true, type: "application/dash+xml", filename: false }
 ]
 ```
 
@@ -134,6 +134,11 @@ If this field is left blank then the full url is passed to the preview as-is.
 "https://i.4cdn.org/g/1745612666469146.#jpg png mp4 webm gif#"
 ```
 
+> [!NOTE]
+> The order of the # list is respected.
+> 
+> Example: If the possibilities are .#jpg png# and both .jpg and .png are valid links, then jpg will be used because it is before png in the # list.
+
 ---
 
 # Modify Headers
@@ -143,26 +148,44 @@ This allows you to modify headers if some pages are expecting certain headers. I
 > [!NOTE]
 > The `add` and `modify` actions do the same thing.
 
+[URL Wilcard Reference](https://developer.chrome.com/docs/extensions/mv2/reference/declarativeNetRequest#filter-matching-characters)
+[Allowed Headers](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest#header_modification)
+
 ### Example
 ```JSON
 [{
-    "url_wildcard": "https://i.pximg.net/img*",
+    "url_wildcard": "i.pximg.net/img*",
     "action": "modify",
     "apply_on": "request",
     "header_name": "Referer",
     "header_value": "https://www.pixiv.net/"
 }, {
-    "url_wildcard": "https://example.com/*",
+    "url_wildcard": "example.com/*",
     "action": "add",
     "apply_on": "response",
     "header_name": "Access-Control-Allow-Origin",
     "header_value": "*"
 }, {
-    "url_wildcard": "https://example.com/*",
+    "url_wildcard": "example.com/*",
     "action": "delete",
     "apply_on": "request",
     "header_name": "Sec-Fetch-Storage-Access"
 }]
+```
+
+# Test URLs
+
+This is where you can list some URLs to test in order to determine if your sieve still works or not. The URLs get tested in a new incognito window so anything that requires a login may not work.
+
+`["Base Page", "Target URL"]`
+
+### Example
+```JSON
+[
+	["https://desuarchive.org/g/", "https://desu-usergeneratedcontent.xyz/g/thumb/1536/11/1536116968128s.jpg"],
+	["https://arch.b4k.dev/g/", "https://arch.b4k.dev/media/g/thumb/1536/11/1536116968128s.jpg"],
+	["https://archived.moe/g/", "https://archived.moe/files/g/thumb/1713/86/1713868492540826s.jpg"]
+]
 ```
 
 ---
@@ -174,3 +197,4 @@ In general, Chrome offers the best user experience for Pictal.
 * Chrome seems to have issues with its download system where it doesn't pass the right headers or cookies or something which leads to issues on certain websites. Pictal sidesteps this by opening a separate tab and downloading the file in it.
 * Chrome's media caching allows for rather seamless browsing with both images and videos whereas on Firefox videos aren't cached as well.
 * Chrome's image decoding is much smoother than Firefox. This is very apparent when dealing with an album of high resolution images.
+* Chrome doesn't care about Content-Security-Policy while Firefox does.

@@ -1,5 +1,68 @@
 @charset "UTF-8";
 
+#test_results {
+    background-image: linear-gradient(180deg, #fff, rgba(245, 245, 255));
+    box-shadow: 0 0 5px #666;
+    box-sizing: border-box;
+    display: none;
+    position: fixed;
+    inset: 0;
+    padding: 0 10px 10px;
+    margin-top: 10%;
+    margin-left: 20%;
+    width: 60%;
+    max-height: 60%;
+    z-index: 10;
+    flex-direction: column;
+}
+#test_results > div > b {
+    border-radius: 10px;
+    float: right;
+    height: 20px;
+    margin-top: 10px;
+    text-align: center;
+    transition: text-shadow 0.3s;
+    width: 20px;
+    font-size: 20px;
+}
+#test_results > div > b:hover {
+    cursor: pointer;
+}
+#test_results > div > h3 {
+    display: inline-block;
+}
+#test_results > .content {
+    padding: 10px 0 0;
+    text-align: center;
+    border: 1px solid;
+
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+
+    div {
+        display: table;
+        margin: 0 auto;
+        table {
+            margin: 5px auto;
+        }
+        table, th, td {
+            border: 1px solid;
+        }
+        td {
+            max-width: 30vw;
+            padding: 5px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    }
+}
+
+
+
+
+
 #link_filter_javascript, #image_filter_javascript {
     height: 50px;
 }
@@ -11,7 +74,7 @@
     height: 200px;
 }
 
-#modify_headers_json {
+#modify_headers_json, #tests_json {
     height: 75px;
 }
 
@@ -96,58 +159,7 @@ a:hover {
     display: block;
     padding-top: 5px;
 }
-#importer {
-    background-image: linear-gradient(180deg, #fff, rgba(245, 245, 255));
-    box-shadow: 0 0 5px #666;
-    box-sizing: border-box;
-    display: none;
-    left: 0;
-    padding: 0 10px 10px;
-    position: absolute;
-    top: 0;
-    width: 100%;
-    z-index: 10;
-}
-#importer > b {
-    border-radius: 10px;
-    float: right;
-    height: 20px;
-    margin-top: 10px;
-    text-align: center;
-    transition: text-shadow 0.3s;
-    width: 20px;
-}
-#importer > b:hover {
-    cursor: pointer;
-    text-shadow: 0 0 10px #000;
-}
-#importer > h3 {
-    display: inline-block;
-}
-#importer > .op_buttons {
-    padding: 10px 0 0;
-    text-align: center;
-}
-#importer .file_button,
-#importer > .op_buttons > button {
-    margin: 0;
-    padding-left: 20px;
-    padding-right: 20px;
-    width: auto;
-}
-#importer > .op_buttons > div {
-    display: inline-block;
-    margin-left: 10px;
-    text-align: left;
-    vertical-align: middle;
-}
-#importer > textarea {
-    height: 185px;
-    margin: 10px 0 7px;
-}
-#importer input:checked + label + label {
-    color: red;
-}
+
 .hint {
     color: #999;
 }
@@ -609,7 +621,7 @@ span.clear_search:hover {
     min-height: 18px;
     text-overflow: inherit;
     margin: 2px 190px 4px 0;
-    margin-right: 123px;
+    margin-right: 156px;
     margin-bottom: 6px;
     border-radius: 6px;
     border-color: transparent;

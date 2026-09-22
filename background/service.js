@@ -72,8 +72,6 @@ async function getSieves() {
 	});
 }
 
-var HeaderRules = new Set();
-
 function onMessage(message, sender, sendResponse) {
 	if (message.type == "GetSieves") {
 		getSieves().then(sieve => {
@@ -211,9 +209,22 @@ function onMessage(message, sender, sendResponse) {
 		});
 		return;
 	}
+	if (message.type == "TestSieves") {
+		testSieves(message.sieve).then(result => {
+			sendResponse({
+				results: result
+			});
+		});
+		return true;
+	}
+	if (message.type == "TestComplete") {
+		testedSieves.push([sender.tab.url, message.files]);
+		chrome.tabs.remove(sender.tab.id);
+		return;
+	}
 }
 
-async function registerContentScripts() {
+async function registerContentScripts(test_mode = false) {
 	try {
 		await chrome.userScripts.configureWorld({
 			csp: "script-src 'self' 'unsafe-eval'",
@@ -226,18 +237,107 @@ async function registerContentScripts() {
 
 	await chrome.runtime.onUserScriptMessage?.addListener(onMessage);
 
+	const file = test_mode ? "tests" : "content";
+
 	// register the content.js as a user script so that unsafe functions like eval are able to be run for sieves
 	await chrome.userScripts.unregister();
 	await chrome.userScripts.register([{
-		id: "content.js",
+		id: `${file}.js`,
 		allFrames: true,
 		matches: ["<all_urls>"],
 		runAt: "document_start",
 		world: "USER_SCRIPT",
 		js: [{
-			file: "content/content.js"
+			file: `content/${file}.js`
 		}],
 	}, ]);
+}
+
+
+let testedSieves = [];
+async function testSieves(sieveToTest = null) {
+	registerContentScripts(true);
+
+	const window = await chrome.windows.create({
+		incognito: true
+	});
+
+	testedSieves = [];
+	let totalTests = 0;
+
+	return new Promise(resolve => {
+		getSieves().then(sieves => {
+			for (const s in sieves) {
+				const sieve = sieves[s];
+				if (!sieve.enabled) continue;
+				if (sieveToTest && s != sieveToTest) continue;
+
+				try {
+					const json = JSON.parse(sieve.tests_json);
+					if (json) {
+						(async () => {
+							const tabs = await Promise.all(
+								json.map((t) => {
+									if (t.length < 2) return;
+
+									totalTests += 1;
+
+									const url = new URL("", t[0]);
+									url.hash = t[1];
+
+									return chrome.tabs.create({
+										url: url.toString(),
+										windowId: window.id,
+										active: false
+									});
+								})
+							);
+							chrome.tabs.group({
+								createProperties: {
+									windowId: window.id
+								},
+								tabIds: tabs.map((it) => it.id)
+							});
+						})();
+					}
+				} catch (_) {}
+			}
+
+			// close first empty tab
+			chrome.tabs.query({
+				windowId: window.id
+			}).then(w => {
+				if (w[0].id == window.tabs[0].id) chrome.tabs.remove(w[0].id);
+			}).then(() => {
+				const timer = setInterval(() => {
+					try {
+						chrome.tabs.query({
+							windowId: window.id
+						}).then(w => {
+							if (w.length == 0) {
+								clearInterval(timer);
+
+								for (const s of testedSieves.sort()) {
+									console.log(s[0]);
+									console.table(s[1]);
+									console.log("\n");
+								}
+								console.log("Tests Completed", `(${testedSieves.length}/${totalTests})`);
+
+								registerContentScripts(false);
+
+								resolve(testedSieves);
+							}
+						});
+					} catch (_) {
+						clearInterval(timer);
+						registerContentScripts(false);
+						resolve(testedSieves);
+					}
+				}, 100);
+			});
+		});
+	});
 }
 
 
@@ -365,15 +465,14 @@ function addModifyHeaderRules(sieves) {
 		JSON.parse(sieves[sieve].modify_headers_json).forEach(sieveRule => {
 			if (!sieveRule.header_name || !sieveRule.url_wildcard || !sieveRule.apply_on) return;
 			let headers;
-			if (sieveRule.action == "add" || sieveRule.action == "modify"){
+			if (sieveRule.action == "add" || sieveRule.action == "modify") {
 				if (!sieveRule.header_value) return;
 				headers = [{
 					header: sieveRule.header_name,
 					operation: "set",
 					value: sieveRule.header_value
 				}];
-			}
-			else if (sieveRule.action == "delete"){
+			} else if (sieveRule.action == "delete") {
 				headers = [{
 					header: sieveRule.header_name,
 					operation: "remove"

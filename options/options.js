@@ -69,12 +69,17 @@ function createSieveElement(sieve_name, sieve) {
             </div>
             <hr>
             <div class="rule_line">
+                <label style="width: 60px">Test URLs:</label>
+                <pre id="tests_json"></pre>
+            </div>
+            <hr>
+            <div class="rule_line">
                 <label style="width: 40px">Notes:</label>
                 <textarea id="notes" wrap="soft" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="height: 120px;">${sieve.notes || ""}</textarea>
             </div>
         </div>
         <div class="action_buttons">
-            <span id="rename" title="Rename sieve">✏️</span><span id="copy" title="Copy sieve to clipboard">&#x1F4CB;</span><span id="toggle" title="Toggle sieve">🚫</span><span id="delete" title="Delete sieve">🗑️</span>
+            <span id="rename" title="Rename sieve">✏️</span><span id="copy" title="Copy sieve to clipboard">&#x1F4CB;</span><span id="toggle" title="Toggle sieve">🚫</span><span id="test" title="Test sieve">🧪</span><span id="delete" title="Delete sieve">🗑️</span>
         </div>
     `;
 
@@ -115,7 +120,7 @@ function createSieveElement(sieve_name, sieve) {
 		observer.observe(editor.container);
 	});
 
-	["modify_headers_json"].forEach(m => {
+	["modify_headers_json", "tests_json"].forEach(m => {
 		const editor = ace.edit(sieve_config.querySelector("#" + m));
 		editor.session.setMode("ace/mode/json");
 		editor.setOptions({
@@ -126,6 +131,7 @@ function createSieveElement(sieve_name, sieve) {
 			wrap: true
 		});
 		if (m == "modify_headers_json") editor.setValue(beautify(sieve.modify_headers_json || ""), -1);
+		if (m == "tests_json") editor.setValue(beautify(sieve.tests_json || ""), -1);
 		const observer = new ResizeObserver(() => {
 			editor.resize();
 		});
@@ -151,6 +157,37 @@ function createSieveElement(sieve_name, sieve) {
 			}
 		});
 		highlightSaveButton();
+	}
+
+	sieve_config.querySelector("#test").onclick = function() {
+		const test_urls = ace.edit(sieve_config.querySelector("#tests_json")).getValue();
+		if (!test_urls) {
+			alert("Test URLs is empty.");
+			return;
+		}
+
+		try {
+			const json = JSON.parse(test_urls);
+			if (typeof(json[0]) != "object") {
+				alert("Test URLs needs to be an array of arrays, you're missing a layer of square brackets.");
+				return;
+			}
+		} catch (_) {
+			alert("Failed to parse Test URLs.");
+			return;
+		}
+
+		save();
+
+
+		chrome.runtime.sendMessage({
+			type: "TestSieves",
+			sieve: sieve_name
+		}, (response) => {
+			const results = response.results;
+			if (!results.length) return;
+			showTestResults(results);
+		});
 	}
 
 	sieve_config.querySelector("#delete").onclick = function() {
@@ -213,6 +250,7 @@ function getSievesFromElements(search = "", sieve = null) {
 		const image_parse_javascript = ace.edit(sieve.querySelector("#image_parse_javascript")).getValue();
 		const prioritize_images = sieve.querySelector("#prioritize_img_checkbox").checked || "";
 		const modify_headers_json = ace.edit(sieve.querySelector("#modify_headers_json")).getValue();
+		const tests_json = ace.edit(sieve.querySelector("#tests_json")).getValue();
 		const notes = sieve.querySelector("#notes").value;
 
 		let new_sieve = {
@@ -225,6 +263,7 @@ function getSievesFromElements(search = "", sieve = null) {
 			image_parse_javascript: image_parse_javascript.trim(),
 			prioritize_images: prioritize_images,
 			modify_headers_json: modify_headers_json.trim(),
+			tests_json: tests_json.trim(),
 			notes: notes.trim()
 		};
 
@@ -311,6 +350,48 @@ function updateSieveCounter() {
 	const total = Object.values(sieves).filter(s => s.style.display != "none").length;
 	const active = Object.values(sieves).filter(s => !s.classList.contains("disabled") && s.style.display != "none").length;
 	document.querySelector("#sieve_count").innerText = `${total} (${active})`;
+}
+
+function showTestResults(results) {
+	document.querySelector("#test_results").style.display = "flex";
+	const content = document.querySelector("#test_results > .content");
+	content.innerHTML = "";
+	results.forEach(test => {
+		const testHTML = document.createElement("div");
+		let entries = "";
+
+		for (let i = 0; i < test[1].length; i++) {
+			entries += `
+				<tr>
+				    <td>${i}</td>
+				    <td><a href="${test[1][i].url}" target="_blank">${test[1][i].url}</td>
+				    <td>${test[1][i].caption || ""}</td>
+				    <td>${test[1][i].video || "false"}</td>
+				</tr>
+			`;
+		}
+
+		const url = test[0].substring(test[0].search("#") + 1);
+
+		testHTML.innerHTML = `
+			<a href="${url}" target="_blank">${url}</a>
+			<table>
+			    <thead>
+			        <tr>
+			            <th>Index</th>
+			            <th>URL</th>
+			            <th>Caption</th>
+			            <th>Video</th>
+			        </tr>
+			    </thead>
+
+			    ${entries}
+			</table>
+			<br>
+			<br>
+		`;
+		content.appendChild(testHTML);
+	});
 }
 
 function findKeyConflicts(els) {
@@ -423,6 +504,8 @@ window.addEventListener("load", function() {
 		}
 	}
 
+
+
 	// load sieves
 	chrome.runtime.sendMessage({
 		type: "GetSieves"
@@ -457,6 +540,8 @@ window.addEventListener("load", function() {
 		const el = document.querySelector("#filters");
 		el.value = response.filters;
 	});
+
+
 
 	document.querySelector(".clear_search").onclick = function() {
 		document.querySelector("#sieve_search").value = "";
@@ -517,6 +602,18 @@ window.addEventListener("load", function() {
 		alert("The sieves have been copied to your clipboard.");
 	}
 
+	document.querySelector("#test_sieves").onclick = function() {
+		if (confirm("Are you sure you want to test all active sieves?\n\n⚠️This will open a new incognito window with a new tab for every test url in every sieve.⚠️")) {
+			chrome.runtime.sendMessage({
+				type: "TestSieves"
+			}, (response) => {
+				const results = response.results;
+				if (!results.length) return;
+				showTestResults(results);
+			});
+		}
+	}
+
 	document.querySelector("#delete_all_rules").onclick = function() {
 		if (confirm("Are you sure you want to delete ALL your sieves?")) {
 			document.querySelectorAll(".sieve").forEach(el => {
@@ -561,6 +658,10 @@ window.addEventListener("load", function() {
 			}
 		}
 	}
+
+	document.querySelector("#close_test_results").onclick = function(e) {
+		document.querySelector("#test_results").style.display = "none";
+	}
 }, false);
 
 document.addEventListener("keydown", function(e) {
@@ -584,7 +685,7 @@ async function checkUserScripts() {
 			});
 		}
 	} catch (e) {
-		msg.innerHTML = `To continue you have to <a href=\"#\">allow User Scripts</a>.`;
+		msg.innerHTML = `To continue, you have to <a href=\"#\">allow User Scripts</a>.`;
 		msg.style.display = "block";
 	}
 

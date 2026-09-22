@@ -29,7 +29,7 @@
 	"background": {
 		"service_worker": "background/service.js"
 	},
-	"incognito": "split",
+	"incognito": "spanning",
 	"options_ui": {
 		"page": "options/options.html",
 		"open_in_tab": true
