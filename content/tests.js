@@ -2,36 +2,50 @@
 
 const protocolRegex = new RegExp(/^(?:(https?:\/\/(?:www\.)?))?(.*)$/i);
 
-async function makeRequest(method, url, blob = false) {
+async function makeRequest({
+	method = null,
+	url = null,
+	headers = {},
+	body = null,
+	blob = false
+}) {
+	if (!method || !url) {
+		console.error("[Link Parse Javascript] Sieve didn't pass a method or url to makeRequest");
+		return;
+	}
 	try {
 		// try from page context with cookies
 		var response = await fetch(url, {
 			method: method,
+			headers: headers,
+			body: body,
 			cache: "default"
 		});
 		if (blob) {
-			var body = await response.blob();
+			var respBody = await response.blob();
 		} else {
-			var body = await response.text();
+			var respBody = await response.text();
 		}
-		var headers = {};
+		var respHeaders = {};
 		response.headers.forEach((value, key) => {
-			headers[key] = value;
+			respHeaders[key] = value;
 		});
 	} catch (error) {
 		// try from service worker
 		var response = await chrome.runtime.sendMessage({
 			type: "MakeRequest",
+			method: method,
 			url: url,
-			method: method
+			headers: headers,
+			body: body
 		});
-		var body = response.body;
-		var headers = response.headers;
+		var respBody = response.body;
+		var respHeaders = response.headers;
 	}
 	return {
 		status: response.status,
-		headers: headers,
-		body: body
+		headers: respHeaders,
+		body: respBody
 	};
 }
 
@@ -105,13 +119,14 @@ function setupTimer(sieve = null, target = null, targetURL = null) {
 			return;
 		}
 
-		if (new Set(files.map(x => x.url)).size != files.length) {
-			console.error("[Files Object Check]", "The returned array contains duplicate urls.");
+		if (files.find(x => !x.url)) {
+			console.error("[Files Object Check]", "The returned array contains an empty url.");
+			PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 			return;
 		}
 
-		if (files.find(x => !x.url)) {
-			console.error("[Files Object Check]", "The returned array contains an empty url.");
+		if (new Set(files.map(x => x.url)).size != files.length) {
+			console.error("[Files Object Check]", "The returned array contains duplicate urls.");
 			return;
 		}
 
@@ -200,8 +215,17 @@ function setupTimer(sieve = null, target = null, targetURL = null) {
 			async function testLink(url) {
 				let img = new Image();
 				const imgPromise = new Promise(resolve => {
-					img.onload = () => resolve(true);
-					img.onerror = () => resolve(false);
+					// img doesn't have onloadmetadata so constantly check for when it has the resolution metadata
+					const timer = setInterval(function() {
+						if (img?.naturalWidth) {
+							clearInterval(timer);
+							resolve(true);
+						}
+					}, 50);
+					img.onerror = () => {
+						clearInterval(timer);
+						resolve(false);
+					}
 					img.src = url;
 				});
 

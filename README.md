@@ -28,6 +28,7 @@ Fully supported on Chrome and Firefox.
 * The core of the sieves only use javascript, there is no swapping between javascript mode and regex mode. I want this to be as simple as possible.
 * The grant/site filter system only uses regex, there is no swapping between modes.
 * There is no high resolution and low resolution mode, you can only choose one url.
+* There are no iframes or sidebars with text, it's just an image or video preview.
 * The APIs available to the sieves are completely different.
 
 ---
@@ -75,7 +76,7 @@ This is where the list of urls you want shown in the preview is created. You hav
 
 | Method       | Type           | Arguments                     | Result                      |
 |--------------|----------------|-------------------------------|-----------------------------|
-| this.request | Async Function | `(method, url, blob = false)` | `{ status, headers, body }` |
+| this.request | Async Function | `{ method, url, headers = {}, body = null, blob = false }` | `{ status, headers, body }` |
 
 > [!NOTE]
 > This async function attempts to run a fetch request in the user script context and then in service worker context to maximize the chance of success.
@@ -135,7 +136,7 @@ If this field is left blank then the full url is passed to the preview as-is.
 ```
 
 > [!NOTE]
-> The order of the # list is respected.
+> The order of the # list is respected. Only one # list is currently supported.
 > 
 > Example: If the possibilities are .#jpg png# and both .jpg and .png are valid links, then jpg will be used because it is before png in the # list.
 
@@ -188,6 +189,10 @@ This is where you can list some URLs to test in order to determine if your sieve
 ]
 ```
 
+# UUID
+
+There is a hidden uuid that is automatically generated and assigned to the sieve. This is so that if the sieve is renamed and a user imports a newer version of the sieve, then Pictal will know it's the same sieve and won't create a duplicate with the newer sieve name.
+
 ---
 
 # Notes
@@ -197,4 +202,3 @@ In general, Chrome offers the best user experience for Pictal.
 * Chrome seems to have issues with its download system where it doesn't pass the right headers or cookies or something which leads to issues on certain websites. Pictal sidesteps this by opening a separate tab and downloading the file in it.
 * Chrome's media caching allows for rather seamless browsing with both images and videos whereas on Firefox videos aren't cached as well.
 * Chrome's image decoding is much smoother than Firefox. This is very apparent when dealing with an album of high resolution images.
-* Chrome doesn't care about Content-Security-Policy while Firefox does.

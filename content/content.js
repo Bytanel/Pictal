@@ -35,36 +35,46 @@ chrome.runtime.sendMessage({
 });
 
 
-async function makeRequest(method, url, blob = false) {
+async function makeRequest({
+	method,
+	url,
+	headers = {},
+	body = null,
+	blob = false
+}) {
 	try {
 		// try from page context with cookies
 		var response = await fetch(url, {
 			method: method,
+			headers: headers,
+			body: body,
 			cache: "default"
 		});
 		if (blob) {
-			var body = await response.blob();
+			var respBody = await response.blob();
 		} else {
-			var body = await response.text();
+			var respBody = await response.text();
 		}
-		var headers = {};
+		var respHeaders = {};
 		response.headers.forEach((value, key) => {
-			headers[key] = value;
+			respHeaders[key] = value;
 		});
 	} catch (error) {
 		// try from service worker
 		var response = await chrome.runtime.sendMessage({
 			type: "MakeRequest",
+			method: method,
 			url: url,
-			method: method
+			headers: headers,
+			body: body
 		});
-		var body = response.body;
-		var headers = response.headers;
+		var respBody = response.body;
+		var respHeaders = response.headers;
 	}
 	return {
 		status: response.status,
-		headers: headers,
-		body: body
+		headers: respHeaders,
+		body: respBody
 	};
 }
 
@@ -84,7 +94,7 @@ function downloadFile() {
 			vid.pause();
 		});
 
-		makeRequest("GET", link, true).then(resp => {
+		makeRequest("GET", link, blob = true).then(resp => {
 			chrome.runtime.sendMessage({
 				type: "Download",
 				url: URL.createObjectURL(resp.body), // CHROME: URL.createObjectURL is disabled in service workers but you can just do it here and pass the url lol
@@ -677,6 +687,10 @@ function loadPictal() {
 		if (!elWidth)[elWidth, elHeight] = getResolution();
 		if (!elWidth || !elHeight) return;
 
+		// not knowing if the document has focus for shortcuts is annoying so add a signifier with the preview border
+		if (document.hasFocus()) PICTAL.DIV.style.border = "3px solid rgba(242, 242, 242, 0.6)";
+		else PICTAL.DIV.style.border = "3px solid rgba(242, 242, 0, 0.6)";
+
 		// bounds of the page
 		const headerSize = (PICTAL.Rotation % 360 == 0 && PICTAL.HEADER.style.display != "none") ? 25 : 0; // header isn't visible when rotated so don't add extra space
 		const divBorderSize = 12; // image resolution doesn't reflect the size of the div due to the border so account for the space the border takes up
@@ -836,19 +850,20 @@ function loadPictal() {
 				return;
 			}
 
-			if (new Set(files.map(x => x.url)).size != files.length) {
-				console.error("[Files Object Check]", "The returned array contains duplicate urls.");
-				PICTAL.LOADER.style.backgroundColor = COLORS.RED;
-				return;
-			}
-
 			if (files.find(x => !x.url)) {
 				console.error("[Files Object Check]", "The returned array contains an empty url.");
 				PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 				return;
 			}
 
+			if (new Set(files.map(x => x.url)).size != files.length) {
+				console.error("[Files Object Check]", "The returned array contains duplicate urls.");
+				PICTAL.LOADER.style.backgroundColor = COLORS.RED;
+				return;
+			}
+
 			HoveredLinks.add(url, files);
+			debug("Gallery:", files);
 			if (target != PICTAL.TargetedElement) return;
 			HoveredLinks.set(url);
 			loadPreviewFile(HoveredLinks.getFile());
@@ -916,7 +931,7 @@ function loadPictal() {
 				let links = [fullURL];
 				if (sieve.image_parse_javascript) {
 					try {
-						var request_url = Function(`'use strict';` + sieve.image_parse_javascript).bind({
+						var requestURL = Function(`'use strict';` + sieve.image_parse_javascript).bind({
 							protocol: protocol,
 							link: link,
 							regex: sieve.image_regex,
@@ -929,15 +944,15 @@ function loadPictal() {
 						return;
 					}
 
-					if (!request_url) {
+					if (!requestURL) {
 						console.error("[Image Parse Javascript]:", "A string was not returned by Image Parse Javascript.");
 						PICTAL.LOADER.style.backgroundColor = COLORS.RED;
 						return;
 					}
 
 					// construct a url for each # permutation 
-					const match = request_url.match(/#([^#]+)#/);
-					links = match ? match[1].trim().split(/\s+/).map(ext => request_url.replace(match[0], ext)) : [request_url];
+					const match = requestURL.match(/#([^#]+)#/);
+					links = match ? match[1].trim().split(/\s+/).map(ext => requestURL.replace(match[0], ext)) : [requestURL];
 				}
 
 
@@ -1075,14 +1090,14 @@ function loadPictal() {
 			return ancestors;
 		}
 
-		const t0 = performance.now();
+		const start = performance.now();
 		if (PICTAL.Debug) console.group(target);
 
 		// get 5 closest ancestors to the target element
 		let targetSieve = null;
 		let targetURL = null;
 		let targetRect = null;
-		const total_elements = new Set();
+		const totalElements = new Set();
 		for (const tgt of getAncestors(target, PICTAL.Preferences["select_biggest_element"] ? 5 : 1)) {
 
 			const tgtRect = tgt.getClientRects()[0];
@@ -1104,8 +1119,9 @@ function loadPictal() {
 			});
 
 
-			let parent = tgt;
 
+
+			let parent = tgt;
 			for (let i = 0; i < 5; i++) {
 				if (parent == document.body) break;
 
@@ -1116,7 +1132,7 @@ function loadPictal() {
 				}
 
 				for (const el of imgEls) {
-					if (elements.has(el) || total_elements.has(el)) continue;
+					if (elements.has(el) || totalElements.has(el)) continue;
 					if (!el.offsetWidth || !el.offsetHeight) continue; // if invisible
 					const elRect = el.getClientRects()[0];
 
@@ -1124,18 +1140,22 @@ function loadPictal() {
 					if (Math.abs(elRect.width - tgtRect.width) > 20 || Math.abs(elRect.height - tgtRect.height) > 20) continue;
 
 					elements.add(el);
-					total_elements.add(el);
+					totalElements.add(el);
 				}
 
 				parent = parent.parentNode;
 			}
 			if (elements.size == 1 && elements.has(null)) continue;
 
+
+
+
 			// look for urls in attributes in all element candidates
-			const urls = new Set();
+			let urls = new Set();
 			elements.forEach(el => {
 				if (!el) return;
-				if (el.href && !el.href.startsWith("javascript:")) urls.add(el.href);
+				if (typeof(el.href) == "string" && !el.href.startsWith("javascript:")) urls.add(el.href);
+				if (typeof(el.href) == "object" && el.href.baseVal) urls.add(el.href.baseVal);
 				if (el.src && !el.src.startsWith("blob:")) urls.add(el.src);
 				if (el.srcset) {
 					let biggestURL;
@@ -1156,15 +1176,23 @@ function loadPictal() {
 				}
 				if (el.hasAttribute("data-file-url")) urls.add(el.getAttribute("data-file-url"));
 				if (el.hasAttribute("data-source")) urls.add(el.getAttribute("data-source"));
+				if (el.hasAttribute("data-src")) urls.add(el.getAttribute("data-src"));
 				if (el.style.background) {
 					const m = el.style.background.match(backgroundImageRegex);
 					if (m) urls.add(m[1]);
 				}
-				if (el.style.backgroundImage) {
+				/*if (el.style.backgroundImage) {
 					const m = el.style.backgroundImage.match(backgroundImageRegex);
 					if (m) urls.add(m[1]);
-				}
+				}*/
 			});
+
+			// urls with special characters like japanese need to be decoded
+			const tmp = new Set();
+			urls.forEach(url => {
+				tmp.add(decodeURIComponent(url));
+			});
+			urls = tmp;
 
 			if (urls.size == 0) continue;
 			if (urls.size == 1 && urls.has(null)) continue;
@@ -1174,24 +1202,26 @@ function loadPictal() {
 			debug("URLs:", urls);
 
 
-			function checkSieveURLs(urls, type, linkRegex, filter_javascript, target) {
+
+
+			function checkSieveURLs(urls, type, linkRegex, filterJavascript, target) {
 				for (const e of urls) {
 					if (!protocolRegex.test(e)) continue;
 					const [, protocol, url] = e.match(protocolRegex);
 
 					// benchmark the sieve regex to catch any bad statements
 					if (PICTAL.Debug) {
-						const t0 = performance.now();
+						const start = performance.now();
 						linkRegex.test(url);
-						const diff = performance.now() - t0;
+						const diff = performance.now() - start;
 						if (diff > 5) {
 							console.error(`${linkRegex} took ${diff}ms to execute`);
 						}
 					}
 
 					if (linkRegex.test(url)) {
-						if (filter_javascript) {
-							const pass = Function(`'use strict';` + filter_javascript).bind({
+						if (filterJavascript) {
+							const pass = Function(`'use strict';` + filterJavascript).bind({
 								protocol: protocol,
 								link: url,
 								regex: linkRegex,
@@ -1251,7 +1281,7 @@ function loadPictal() {
 				}
 			}
 		}
-		debug(`sieve check took ${performance.now() - t0}ms`);
+		debug(`sieve check took ${performance.now() - start}ms`);
 		if (!targetURL) {
 			if (PICTAL.Debug) console.groupEnd();
 			return;
@@ -1259,12 +1289,13 @@ function loadPictal() {
 		targetURL[1] = targetURL[1] || ""; // "data:" urls don't have a protocol
 
 
+
+
 		createOutline();
 		createLoader();
 		PICTAL.TargetedElement = target;
 		PICTAL.LOADER.style.backgroundColor = COLORS.WHITE;
 		PICTAL.State = "selecting";
-
 
 		// start timer to run the sieve's code
 		setupTimer(targetSieve, target, targetURL);
@@ -1307,7 +1338,7 @@ function loadPictal() {
 		}
 	});
 
-	window.navigation.addEventListener("navigate", (e) => {
+	window.navigation.addEventListener("navigate", () => {
 		if (PICTAL.State == "idle") return;
 		reset();
 	})
@@ -1403,12 +1434,12 @@ function loadPictal() {
 		const file = HoveredLinks.getFile();
 		const albumSize = HoveredLinks.getFiles().length;
 
-		const step_forward = (e.key == "ArrowRight" || (!e.shiftKey && e.key == " ") || e.key == "PageDown");
-		const step_backward = (e.key == "ArrowLeft" || (e.shiftKey && e.key == " ") || e.key == "PageUp");
-		if (!e.ctrlKey && (step_forward || step_backward)) {
+		const stepForward = (e.key == "ArrowRight" || (!e.shiftKey && e.key == " ") || e.key == "PageDown");
+		const stepBackward = (e.key == "ArrowLeft" || (e.shiftKey && e.key == " ") || e.key == "PageUp");
+		if (!e.ctrlKey && (stepForward || stepBackward)) {
 			stopPropagation(e);
 			if (albumSize > 1) {
-				HoveredLinks.setIndex(clamp(HoveredLinks.getIndex() + ((step_forward ? 1 : -1) * ((e.shiftKey && e.key != " ") ? 5 : 1)), 0, albumSize - 1));
+				HoveredLinks.setIndex(clamp(HoveredLinks.getIndex() + ((stepForward ? 1 : -1) * ((e.shiftKey && e.key != " ") ? 5 : 1)), 0, albumSize - 1));
 				loadPreviewFile();
 			}
 		}
@@ -1603,7 +1634,7 @@ function loadPictal() {
 		return nearSide;
 	}
 
-	function previewZoom(zoom_in) {
+	function previewZoom(zoomIn) {
 		const [width, height] = getResolution();
 		if (!width || !height) return;
 
@@ -1614,10 +1645,10 @@ function loadPictal() {
 		const min = scale / 25; // zoom out
 		const max = scale * imageRatio * 25; // zoom in
 
-		if (!zoom_in && PICTAL.CenterZoom > min) {
+		if (!zoomIn && PICTAL.CenterZoom > min) {
 			PICTAL.CenterZoom *= .75;
 		}
-		if (zoom_in && PICTAL.CenterZoom < max) {
+		if (zoomIn && PICTAL.CenterZoom < max) {
 			PICTAL.CenterZoom *= 1 / .75;
 		}
 	}

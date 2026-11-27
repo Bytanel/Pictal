@@ -77,6 +77,7 @@ function createSieveElement(sieve_name, sieve) {
                 <label style="width: 40px">Notes:</label>
                 <textarea id="notes" wrap="soft" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="height: 120px;">${sieve.notes || ""}</textarea>
             </div>
+            <input type="hidden" id="uuid" value="${sieve.uuid || crypto.randomUUID()}">
         </div>
         <div class="action_buttons">
             <span id="rename" title="Rename sieve">✏️</span><span id="copy" title="Copy sieve to clipboard">&#x1F4CB;</span><span id="toggle" title="Toggle sieve">🚫</span><span id="test" title="Test sieve">🧪</span><span id="delete" title="Delete sieve">🗑️</span>
@@ -186,7 +187,7 @@ function createSieveElement(sieve_name, sieve) {
 		}, (response) => {
 			const results = response.results;
 			if (!results.length) return;
-			showTestResults(results);
+			showTestResults(results, JSON.parse(test_urls).length);
 		});
 	}
 
@@ -236,7 +237,7 @@ function getSievesFromElements(search = "", sieve = null) {
 
 	let regular_sieves = {};
 	let last_sieves = {};
-	for (var i = 0; i < sieves.length; i++) {
+	for (let i = 0; i < sieves.length; i++) {
 		const sieve = sieves[i];
 
 		const id = sieve.querySelector("#sieve_title").textContent.trim();
@@ -252,6 +253,7 @@ function getSievesFromElements(search = "", sieve = null) {
 		const modify_headers_json = ace.edit(sieve.querySelector("#modify_headers_json")).getValue();
 		const tests_json = ace.edit(sieve.querySelector("#tests_json")).getValue();
 		const notes = sieve.querySelector("#notes").value;
+		const uuid = sieve.querySelector("#uuid").value;
 
 		let new_sieve = {
 			enabled: enabled,
@@ -264,7 +266,8 @@ function getSievesFromElements(search = "", sieve = null) {
 			prioritize_images: prioritize_images,
 			modify_headers_json: modify_headers_json.trim(),
 			tests_json: tests_json.trim(),
-			notes: notes.trim()
+			notes: notes.trim(),
+			uuid: uuid
 		};
 
 		Object.keys(new_sieve).forEach(key => {
@@ -337,7 +340,22 @@ function save() {
 
 function newSieve() {
 	const sieve_name = "new sieve " + Date.now();
-	SAVED_SIEVES[sieve_name] = {}
+	SAVED_SIEVES[sieve_name] = {
+		'link_parse_javascript': `
+const resp = await this.request({
+	method: 'GET',
+	url: this.protocol + this.link
+});
+const parser = new DOMParser();
+const doc = parser.parseFromString(resp.body, 'text/html');
+
+return [{
+	url: doc.querySelector('img').src,
+	caption: 'My Sieve',
+	video: false,
+	videojs: false
+}];`
+	};
 	createSieveElement(sieve_name, SAVED_SIEVES[sieve_name]);
 }
 
@@ -352,10 +370,14 @@ function updateSieveCounter() {
 	document.querySelector("#sieve_count").innerText = `${total} (${active})`;
 }
 
-function showTestResults(results) {
+function showTestResults(results, count) {
 	document.querySelector("#test_results").style.display = "flex";
 	const content = document.querySelector("#test_results > .content");
+
+	document.querySelector("#test_results #test_completions").innerText = `(${results.length} / ${count})`;
+
 	content.innerHTML = "";
+
 	results.forEach(test => {
 		const testHTML = document.createElement("div");
 		let entries = "";
@@ -364,7 +386,7 @@ function showTestResults(results) {
 			entries += `
 				<tr>
 				    <td>${i}</td>
-				    <td><a href="${test[1][i].url}" target="_blank">${test[1][i].url}</td>
+				    <td><a href="${encodeURI(test[1][i].url)}" target="_blank">${test[1][i].url}</td>
 				    <td>${test[1][i].caption || ""}</td>
 				    <td>${test[1][i].video || "false"}</td>
 				</tr>
@@ -478,12 +500,23 @@ function setupShortcuts(shortcuts) {
 }
 
 function sievesFromJSON(json) {
-	document.querySelector("#sieve_container").innerHTML = '';
+	document.querySelector("#sieve_container").innerHTML = "";
+
 	for (const sieve in json) {
-		let enabled = SAVED_SIEVES[sieve]?.enabled;
+		let enabled = SAVED_SIEVES[sieve]?.enabled || json[sieve]?.enabled || false;
+
+		// if two sieves have the same uuid then delete the old sieve, this is soley to handle if a sieve gets renamed
+		let find_same_uuid = Object.keys(SAVED_SIEVES).find(key => SAVED_SIEVES[key].uuid == json[sieve].uuid);
+		if (find_same_uuid && find_same_uuid != sieve) {
+			enabled = SAVED_SIEVES[find_same_uuid].enabled || false;
+			delete SAVED_SIEVES[find_same_uuid];
+		}
+
 		SAVED_SIEVES[sieve] = json[sieve];
-		if (enabled) SAVED_SIEVES[sieve].enabled = enabled;
+
+		if (enabled != undefined) SAVED_SIEVES[sieve].enabled = enabled;
 	}
+
 	for (const sieve in SAVED_SIEVES) {
 		createSieveElement(sieve, SAVED_SIEVES[sieve]);
 	}
@@ -549,6 +582,7 @@ window.addEventListener("load", function() {
 		document.querySelectorAll(".sieve").forEach(el => {
 			el.style.display = "initial";
 		});
+		updateSieveCounter();
 	}
 	document.querySelector("#sieve_search").value = "";
 	document.querySelector("#sieve_search").oninput = function(e) {
@@ -571,12 +605,13 @@ window.addEventListener("load", function() {
 	}
 
 	document.querySelector("#import_sieves").onclick = function() {
-		let json = prompt("Paste the JSON of the sieves you want to import. If an imported sieve has the same name as an existing sieve then the existing sieve will be overwritten.", "{}");
+		let json = prompt("Paste the JSON of the sieves you want to import. If an imported sieve has the same uuid as an existing sieve then the existing sieve will be overwritten.\n\n⚠️Sieves allow you to run arbitrary code on ANY website. Only import sieves you got from a trusted source.⚠️", "{}");
 		if (json) {
 			try {
 				sievesFromJSON(JSON.parse(json));
 				highlightSaveButton();
 			} catch (err) {
+				console.log(err);
 				alert("The imported json is malformed.");
 			}
 		}
@@ -590,7 +625,7 @@ window.addEventListener("load", function() {
 			}
 			return response.json();
 		}).then(json => {
-			if (confirm(`Downloaded ${Object.keys(json).length} sieves. Do you wish to import them? Any sieves with the same name will be overwritten.`)) {
+			if (confirm(`Downloaded ${Object.keys(json).length} sieves. Do you wish to import them? Any sieves with the same uuid will be overwritten.`)) {
 				sievesFromJSON(json);
 				highlightSaveButton();
 			}
@@ -603,13 +638,25 @@ window.addEventListener("load", function() {
 	}
 
 	document.querySelector("#test_sieves").onclick = function() {
-		if (confirm("Are you sure you want to test all active sieves?\n\n⚠️This will open a new incognito window with a new tab for every test url in every sieve.⚠️")) {
+		if (confirm("Are you sure you want to test all active sieves?\n\n⚠️This will open a new incognito window with a new tab for every test url in every sieve. Pictal will also be non-functional until the window is closed.⚠️")) {
 			chrome.runtime.sendMessage({
 				type: "TestSieves"
 			}, (response) => {
 				const results = response.results;
 				if (!results.length) return;
-				showTestResults(results);
+
+				let count = 0;
+				const sieves = getSievesFromElements();
+				for (const s in sieves) {
+					const sieve = sieves[s];
+					if (!sieve.enabled) continue;
+					try {
+						const json = JSON.parse(sieve.tests_json);
+						count += json.length;
+					} catch (_) {}
+				}
+
+				showTestResults(results, count);
 			});
 		}
 	}

@@ -18,7 +18,7 @@ const DefaultPreferences = {
 	distance_from_cursor: 20,
 	hide_cursor_delay: 1500,
 	keep_cached_album_index: true,
-	click_to_close: true,
+	click_to_close: false,
 	select_biggest_element: true,
 	debug_mode: false,
 	show_caption: true,
@@ -134,6 +134,8 @@ function onMessage(message, sender, sendResponse) {
 	if (message.type == "MakeRequest") { // required to be done in a service worker because of CORS
 		fetch(message.url, {
 			method: message.method,
+			headers: message.headers,
+			body: message.body,
 			credentials: "include",
 			cache: "default"
 		}).then(r => {
